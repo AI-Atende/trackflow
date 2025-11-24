@@ -1,0 +1,41 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  url      = env("DATABASE_URL")
+  provider = "postgresql"
+}
+
+model Client {
+  id            String          @id @default(cuid())
+  name          String
+  role          Role            @default(MEMBER)
+  email         String?         @unique
+  passwordHash  String?
+  metaAdAccount MetaAdAccount?
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+}
+
+enum Role {
+  MEMBER
+  ADMIN
+}
+
+model MetaAdAccount {
+  id             String   @id @default(cuid())
+  clientId       String   @unique
+  client         Client   @relation(fields: [clientId], references: [id])
+
+  adAccountId    String   // ex.: "act_1234567890"
+  name           String?
+  accessToken    String   // token que será usado nas chamadas
+  tokenExpiresAt DateTime?
+  status         String   // "active", "revoked", etc.
+
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  // clientId is unique so each client can have at most one MetaAdAccount
+}

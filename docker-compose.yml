@@ -1,0 +1,26 @@
+services:
+  database:
+    image: postgres:16
+    restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    # Remove exposição externa da porta do banco para segurança
+    ports:
+      - "${HOST_PORT_DB:-5432}:5432"
+    volumes:
+      - ./data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DATABASE_USER}"]
+      interval: 10s
+      retries: 5
+    networks:
+      - trackflow-network
+
+volumes:
+  data:
+
+networks:
+  trackflow-network:
+    driver: bridge
