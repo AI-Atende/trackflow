@@ -1,0 +1,83 @@
+generator client {
+  provider = "prisma-client-js"
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  MEMBER
+}
+
+model Client {
+  id             String              @id @default(cuid())
+  name           String
+  email          String              @unique
+  passwordHash   String
+  image          String?
+  role           Role                @default(MEMBER)
+  isActive       Boolean             @default(true)
+  metaAdAccount  MetaAdAccount?
+  integrations   IntegrationConfig[]
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+}
+
+model MetaAdAccount {
+  id             String              @id @default(cuid())
+  clientId       String              @unique
+  client         Client              @relation(fields: [clientId], references: [id])
+  adAccountId    String
+  name           String?
+  accessToken    String
+  tokenExpiresAt DateTime?
+  status         String
+  insightsDaily  MetaAdInsightDaily[]
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+
+  @@index([clientId])
+  @@index([adAccountId])
+}
+
+model IntegrationConfig {
+  id          String   @id @default(cuid())
+  clientId    String
+  client      Client   @relation(fields: [clientId], references: [id])
+  provider    String   // "KOMMO"
+  isActive    Boolean  @default(false)
+  config      Json?    // { subdomain: "..." }
+  journeyMap  Json?    // ["Criado", "Qualificado", ...]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([clientId])
+}
+
+model MetaAdInsightDaily {
+  id              String         @id @default(cuid())
+  metaAdAccountId String
+  metaAdAccount   MetaAdAccount  @relation(fields: [metaAdAccountId], references: [id])
+  date            DateTime
+  campaignId      String
+  campaignName    String
+  adsetId         String
+  adsetName       String
+  adId            String
+  adName          String
+  impressions     Int
+  clicks          Int
+  spend           Float
+  leads           Int
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  @@unique([metaAdAccountId, adId, date])
+  @@index([campaignId])
+  @@index([adId])
+  @@index([date])
+}
