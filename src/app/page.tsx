@@ -78,7 +78,7 @@ const HomeContent = () => {
     const [searchTerm, setSearchTerm] = useState('');
     const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-    const [isLoadingData, setIsLoadingData] = useState(false);
+    const [isLoadingData, setIsLoadingData] = useState(true);
 
     const [integrationConfig, setIntegrationConfig] = useState<{ isActive: boolean, journeyMap: string[] } | null>(null);
     const [dataSource, setDataSource] = useState<'KOMMO' | 'META' | 'HYBRID'>('KOMMO');
@@ -105,33 +105,38 @@ const HomeContent = () => {
     }, [status, session, router, dateRange, dataSource]); // Re-fetch when dataSource changes
 
     const checkIntegrationAndFetch = async () => {
-        // Se o usuário selecionou META explicitamente, buscamos dados do Meta
-        if (dataSource === 'META') {
-            fetchMetaDashboardData();
-            return;
-        }
+        setIsLoadingData(true);
 
-        // Se não, verificamos integração Kommo
+        // 1. Verificar status da integração Kommo
+        let isKommoActive = false;
+        let journeyMap: string[] = [];
+
         try {
             const res = await fetch('/api/integrations/kommo');
             if (res.ok) {
                 const config = await res.json();
                 if (config.isActive) {
+                    isKommoActive = true;
+                    journeyMap = config.journeyMap;
                     setIntegrationConfig({ isActive: true, journeyMap: config.journeyMap });
-                    fetchKommoDashboardData(config.journeyMap);
-                    return;
+                } else {
+                    setIntegrationConfig(null);
                 }
             }
         } catch (e) {
             console.error("Erro ao verificar integração:", e);
+            setIntegrationConfig(null);
         }
 
-        // Fallback para Meta se Kommo não estiver ativo, mesmo se selecionado Kommo/Hybrid
-        setIntegrationConfig(null);
-        if (session?.user?.metaAdAccount?.adAccountId) {
-            // Se estava tentando ver Kommo mas não tem config, avisa ou mostra Meta?
-            // Vamos mostrar Meta por padrão se não tiver integração
+        // 2. Decidir qual dado buscar
+        if (dataSource === 'META') {
             fetchMetaDashboardData();
+        } else if (isKommoActive) {
+            fetchKommoDashboardData(journeyMap);
+        } else {
+            // Se Kommo inativo e selecionado Kommo/Hybrid -> Fallback para Meta
+            setDataSource('META');
+            return; // O useEffect vai rodar novamente com dataSource='META'
         }
     };
 
@@ -218,7 +223,10 @@ const HomeContent = () => {
     };
 
     const fetchMetaDashboardData = async () => {
-        if (!session?.user?.metaAdAccount?.adAccountId) return;
+        if (!session?.user?.metaAdAccount?.adAccountId) {
+            setIsLoadingData(false);
+            return;
+        }
         setIsLoadingData(true);
         try {
             const since = format(dateRange.from, 'yyyy-MM-dd');
@@ -540,26 +548,28 @@ const HomeContent = () => {
                             </div>
 
                             {/* Data Source Selector - Hero Position */}
-                            <div className="flex items-center bg-secondary/50 rounded-lg p-1 self-start md:self-auto border border-border glass">
-                                <button
-                                    onClick={() => setDataSource('KOMMO')}
-                                    className={`px-4 py-1.5 text-xs font-medium rounded-md transition-all ${dataSource === 'KOMMO' ? 'bg-brand-500 text-white shadow-lg shadow-brand-500/20' : 'text-muted-foreground hover:text-foreground hover:bg-white/5'}`}
-                                >
-                                    Kommo
-                                </button>
-                                <button
-                                    onClick={() => setDataSource('META')}
-                                    className={`px-4 py-1.5 text-xs font-medium rounded-md transition-all ${dataSource === 'META' ? 'bg-brand-500 text-white shadow-lg shadow-brand-500/20' : 'text-muted-foreground hover:text-foreground hover:bg-white/5'}`}
-                                >
-                                    Meta
-                                </button>
-                                <button
-                                    onClick={() => setDataSource('HYBRID')}
-                                    className={`px-4 py-1.5 text-xs font-medium rounded-md transition-all ${dataSource === 'HYBRID' ? 'bg-brand-500 text-white shadow-lg shadow-brand-500/20' : 'text-muted-foreground hover:text-foreground hover:bg-white/5'}`}
-                                >
-                                    Kommo + Meta
-                                </button>
-                            </div>
+                            {integrationConfig?.isActive && (
+                                <div className="flex items-center bg-secondary/50 rounded-lg p-1 self-start md:self-auto border border-border glass">
+                                    <button
+                                        onClick={() => setDataSource('KOMMO')}
+                                        className={`px-4 py-1.5 text-xs font-medium rounded-md transition-all ${dataSource === 'KOMMO' ? 'bg-brand-500 text-white shadow-lg shadow-brand-500/20' : 'text-muted-foreground hover:text-foreground hover:bg-white/5'}`}
+                                    >
+                                        Kommo
+                                    </button>
+                                    <button
+                                        onClick={() => setDataSource('META')}
+                                        className={`px-4 py-1.5 text-xs font-medium rounded-md transition-all ${dataSource === 'META' ? 'bg-brand-500 text-white shadow-lg shadow-brand-500/20' : 'text-muted-foreground hover:text-foreground hover:bg-white/5'}`}
+                                    >
+                                        Meta
+                                    </button>
+                                    <button
+                                        onClick={() => setDataSource('HYBRID')}
+                                        className={`px-4 py-1.5 text-xs font-medium rounded-md transition-all ${dataSource === 'HYBRID' ? 'bg-brand-500 text-white shadow-lg shadow-brand-500/20' : 'text-muted-foreground hover:text-foreground hover:bg-white/5'}`}
+                                    >
+                                        Kommo + Meta
+                                    </button>
+                                </div>
+                            )}
                         </div>
 
                         {/* Metrics Grid */}
