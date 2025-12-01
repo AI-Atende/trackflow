@@ -109,10 +109,12 @@ export async function fetchKommoData(
           campaignTotals.stage1 += ad.leadsCount;
         } else {
           // Mapeamento normal
-          journeyStages.slice(0, 5).forEach((stageName, idx) => {
+          journeyStages.slice(0, 4).forEach((stageName, idx) => {
             const key = `stage${idx + 1}` as keyof typeof campaignTotals;
             campaignTotals[key] += ad.journey?.[stageName] || 0;
           });
+          // Stage 5 é Receita
+          campaignTotals.stage5 += ad.totalRevenue || 0;
         }
       });
     });
@@ -214,13 +216,13 @@ export async function fetchKommoHierarchy(
         if (journeyKeys.length === 0 && ad.leadsCount > 0) {
           adNode.data.stage1 = ad.leadsCount;
         } else {
-          journeyStages.slice(0, 5).forEach((stageName, idx) => {
+          journeyStages.slice(0, 4).forEach((stageName, idx) => {
             const key = `stage${idx + 1}` as keyof typeof adNode.data;
             adNode.data[key] = ad.journey?.[stageName] || 0;
           });
         }
-        // Receita do anúncio (stage5 * 100 ou totalRevenue se disponível)
-        adNode.data.stage5 = ad.totalRevenue ? ad.totalRevenue / 100 : 0;
+        // Receita do anúncio (totalRevenue)
+        adNode.data.stage5 = ad.totalRevenue || 0;
 
         // Somar ao AdSet
         adSetNode.data.stage1 += adNode.data.stage1;

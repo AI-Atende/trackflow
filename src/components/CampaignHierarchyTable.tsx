@@ -36,7 +36,7 @@ const HierarchyRow = ({ node, level, journeyLabels }: { node: CampaignHierarchy,
 
             <span
               className={`font-medium ${level === 0 ? 'text-foreground' : 'text-muted-foreground'} truncate max-w-[300px] hover:text-brand-500 cursor-copy transition-colors`}
-              title="Clique para copiar"
+              title="Copiar"
               onClick={(e) => handleCopy(e, node.name)}
             >
               {node.name}

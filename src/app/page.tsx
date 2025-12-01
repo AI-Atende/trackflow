@@ -162,7 +162,7 @@ const HomeContent = () => {
                 const totalStage3 = campaigns.reduce((acc: number, c: any) => acc + c.data.stage3, 0);
                 const totalSpend = campaigns.reduce((acc: number, c: any) => acc + (c.spend || 0), 0);
 
-                const totalRevenue = campaigns.reduce((acc: number, c: any) => acc + (c.data.stage5 * 100), 0);
+                const totalRevenue = campaigns.reduce((acc: number, c: any) => acc + (c.data.stage5 || 0), 0);
                 const totalROAS = totalSpend > 0 ? totalRevenue / totalSpend : 0;
 
                 const baseMetrics = [
@@ -544,18 +544,7 @@ const HomeContent = () => {
                     <section className="space-y-6">
                         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                             <div>
-                                <h1
-                                    className="text-2xl font-bold text-foreground tracking-tight flex items-center gap-2 cursor-pointer hover:text-brand-500 transition-colors"
-                                    onClick={(e) => {
-                                        const selectedCampaign = campaigns.find(c => c.id === selectedCampaignId);
-                                        const textToCopy = selectedCampaign ? selectedCampaign.name : "Dashboard";
-                                        navigator.clipboard.writeText(textToCopy);
-                                        showToast(`"${textToCopy}" copiado!`, "success");
-                                    }}
-                                    title="Clique para copiar"
-                                >
-                                    {campaigns.find(c => c.id === selectedCampaignId)?.name || "Dashboard"}
-                                </h1>
+                                <h1 className="text-2xl font-bold text-foreground tracking-tight">Dashboard</h1>
                                 <p className="text-sm text-muted-foreground">Visão geral do desempenho das suas campanhas.</p>
                             </div>
 
@@ -604,7 +593,7 @@ const HomeContent = () => {
                     </section>
 
                     {/* Middle Section: Chart & AI */}
-                    <section className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                    < section className="grid grid-cols-1 lg:grid-cols-3 gap-8" >
                         <div className="lg:col-span-2">
                             <FunnelChart
                                 data={filteredCampaigns}
@@ -616,10 +605,10 @@ const HomeContent = () => {
                         <div className="lg:col-span-1">
                             <AiInsights campaigns={filteredCampaigns} loading={isLoadingData} />
                         </div>
-                    </section>
+                    </section >
 
                     {/* Main Table */}
-                    <section>
+                    < section >
                         <div className="flex items-center justify-between mb-4">
                             <h2 className="text-lg font-bold text-foreground">Rastreamento de Campanhas</h2>
                             <div className="flex gap-2">
@@ -648,9 +637,9 @@ const HomeContent = () => {
                             dataSource={dataSource}
                             loading={isLoadingData}
                         />
-                    </section>
+                    </section >
 
-                </div>
+                </div >
             </main >
         </div >
     );

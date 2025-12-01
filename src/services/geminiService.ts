@@ -23,7 +23,7 @@ export const analyzeCampaignData = async (campaigns: AdCampaign[]): Promise<stri
     II: Cliques
     III: Leads
     IV: Checkout
-    V: Compra
+    V: Compra (Quantidade ou Receita)
 
     Dados: ${JSON.stringify(campaigns)}
 

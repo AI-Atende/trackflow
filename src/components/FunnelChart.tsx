@@ -2,6 +2,7 @@ import React from 'react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { AdCampaign } from '../types';
 import { Skeleton } from './Skeleton';
+import { useToast } from '@/contexts/ToastContext';
 
 interface FunnelChartProps {
   data: AdCampaign[];
@@ -11,6 +12,14 @@ interface FunnelChartProps {
 }
 
 export const FunnelChart: React.FC<FunnelChartProps> = ({ data, selectedId, journeyLabels, loading }) => {
+  const { showToast } = useToast();
+
+  const handleCopy = (e: React.MouseEvent, text: string) => {
+    e.stopPropagation();
+    navigator.clipboard.writeText(text);
+    showToast(`"${text}" copiado!`, "success");
+  };
+
   if (loading) {
     return (
       <div className="h-[300px] w-full bg-card rounded-xl p-4 border border-border">
@@ -48,7 +57,13 @@ export const FunnelChart: React.FC<FunnelChartProps> = ({ data, selectedId, jour
     <div className="h-[300px] w-full bg-card rounded-xl p-4 border border-border glass">
       <div className="flex justify-between items-center mb-4 px-2">
         <h3 className="text-sm font-semibold text-muted-foreground">
-          Funil Visual: <span className="text-brand-500">{activeCampaign.name}</span>
+          Funil Visual: <span
+            className="text-brand-500 cursor-pointer hover:underline"
+            title="Copiar"
+            onClick={(e) => handleCopy(e, activeCampaign.name)}
+          >
+            {activeCampaign.name}
+          </span>
         </h3>
       </div>
       <ResponsiveContainer width="100%" height="85%">

@@ -115,7 +115,7 @@ export const TrackingTable: React.FC<TrackingTableProps> = ({ data, onSelect, se
                         }`} />
                       <span
                         className="truncate max-w-[200px] hover:text-brand-500 cursor-copy transition-colors"
-                        title="Clique para copiar"
+                        title="Copiar"
                         onClick={(e) => handleCopy(e, ad.name)}
                       >
                         {ad.name}
@@ -164,7 +164,9 @@ export const TrackingTable: React.FC<TrackingTableProps> = ({ data, onSelect, se
 
                   {/* Stage V */}
                   <td className="px-4 py-3 md:px-6 md:py-4 text-center">
-                    <span className="font-bold text-brand-500">{formatNumber(ad.data.stage5)}</span>
+                    <span className="font-bold text-brand-500">
+                      {dataSource === 'META' ? formatNumber(ad.data.stage5) : formatCurrency(ad.data.stage5)}
+                    </span>
                   </td>
 
                   <td className="px-4 py-3 md:px-6 md:py-4 text-right">
