@@ -99,6 +99,7 @@ export async function fetchMetaHierarchy(adAccountId: string, since: string, unt
         data: { stage1: 0, stage2: 0, stage3: 0, stage4: 0, stage5: 0 },
         spend: 0,
         roas: 0,
+        revenue: 0,
         children: []
       });
     }
@@ -118,6 +119,7 @@ export async function fetchMetaHierarchy(adAccountId: string, since: string, unt
         data: { stage1: 0, stage2: 0, stage3: 0, stage4: 0, stage5: 0 },
         spend: 0,
         roas: 0,
+        revenue: 0,
         children: []
       };
       adSetsMap.set(row.adsetId, adSetNode);
@@ -139,7 +141,8 @@ export async function fetchMetaHierarchy(adAccountId: string, since: string, unt
         status: 'active',
         data: { stage1: 0, stage2: 0, stage3: 0, stage4: 0, stage5: 0 },
         spend: 0,
-        roas: 0
+        roas: 0,
+        revenue: 0
       };
       adsMap.set(row.adId, adNode);
     }
@@ -171,6 +174,7 @@ export async function fetchMetaHierarchy(adAccountId: string, since: string, unt
         data: { stage1: 0, stage2: 0, stage3: 0, stage4: 0, stage5: 0 },
         spend: 0,
         roas: 0,
+        revenue: 0,
         children: []
       });
     }
@@ -191,6 +195,7 @@ export async function fetchMetaHierarchy(adAccountId: string, since: string, unt
         data: { stage1: 0, stage2: 0, stage3: 0, stage4: 0, stage5: 0 },
         spend: 0,
         roas: 0,
+        revenue: 0,
         children: []
       };
       campaign.children?.push(adSet);
@@ -210,7 +215,8 @@ export async function fetchMetaHierarchy(adAccountId: string, since: string, unt
         status: 'active',
         data: { stage1: 0, stage2: 0, stage3: 0, stage4: 0, stage5: 0 },
         spend: 0,
-        roas: 0
+        roas: 0,
+        revenue: 0
       };
       adSet.children?.push(ad);
     }
