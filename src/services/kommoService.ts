@@ -35,11 +35,15 @@ export async function fetchKommoData(
   });
 
   if (dateRange) {
-    // A API do Kommo (conforme documentação) não especificou filtro de data na query,
-    // mas vamos assumir que pode ser implementado ou filtrado no backend.
-    // Se a API não suportar, teremos que filtrar no retorno (o que é ineficiente para grandes volumes).
-    // Por enquanto, vamos enviar para caso a API suporte no futuro ou ignorar.
-    // url.searchParams.set("since", ...); 
+    const fromSeconds = Math.floor(dateRange.from.getTime() / 1000);
+    // Ajustar 'to' para o final do dia se necessário, mas como vem do DateRangePicker geralmente já é tratado.
+    // O DateRangePicker retorna 'to' como o dia selecionado. Se for o mesmo dia, pode ser 00:00.
+    // Vamos garantir que 'to' cubra o dia inteiro se for apenas data, mas o backend que decida.
+    // O user pediu apenas para passar os parametros.
+    const toSeconds = Math.floor(dateRange.to.getTime() / 1000);
+
+    url.searchParams.set("created_at_from", fromSeconds.toString());
+    url.searchParams.set("created_at_to", toSeconds.toString());
   }
 
   const res = await fetch(url.toString(), {
