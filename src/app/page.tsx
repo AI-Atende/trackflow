@@ -397,7 +397,7 @@ const HomeContent = () => {
                         <span className="font-medium">Dashboard Geral</span>
                     </a>
 
-                    <a href="#" className="flex items-center gap-3 px-3 py-2.5 hover:bg-accent hover:text-accent-foreground rounded-lg transition-all group">
+                    <a href="/campaigns" className="flex items-center gap-3 px-3 py-2.5 hover:bg-accent hover:text-accent-foreground rounded-lg transition-all group">
                         <Target size={18} className="group-hover:scale-110 transition-transform" />
                         <span className="font-medium">Campanhas</span>
                     </a>

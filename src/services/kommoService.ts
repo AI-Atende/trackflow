@@ -1,4 +1,4 @@
-import { AdCampaign } from "@/types";
+import { AdCampaign, CampaignHierarchy } from "@/types";
 
 interface KommoResponse {
   campaigns: {
@@ -75,11 +75,9 @@ export async function fetchKommoData(
   const campaigns: AdCampaign[] = [];
 
   data.campaigns.forEach((camp, campIndex) => {
-    // Filtrar ou renomear unknown_campaign
-    let campaignName = camp.campaign;
-    if (campaignName === 'unknown_campaign') {
-      campaignName = 'Campanha Desconhecida';
-      // Ou se preferir não mostrar: return;
+    // Filtrar campaign desconhecida
+    if (camp.campaign === 'unknown_campaign') {
+      return;
     }
 
     // Inicializar acumuladores para a campanha
@@ -93,7 +91,17 @@ export async function fetchKommoData(
 
     // Iterar sobre grupos e anúncios para somar
     camp.groups.forEach((group) => {
+      // Filtrar medium desconhecido
+      if (group.medium === 'unknown_medium') {
+        return;
+      }
+
       group.ads.forEach((ad) => {
+        // Filtrar content desconhecido
+        if (ad.content === 'unknown_content') {
+          return;
+        }
+
         const journeyKeys = Object.keys(ad.journey || {});
 
         if (journeyKeys.length === 0 && ad.leadsCount > 0) {
@@ -112,7 +120,7 @@ export async function fetchKommoData(
     // Adicionar a campanha agregada à lista
     campaigns.push({
       id: `kommo-camp-${campIndex}`,
-      name: campaignName,
+      name: camp.campaign,
       status: "active",
       data: {
         stage1: campaignTotals.stage1,
@@ -126,8 +134,6 @@ export async function fetchKommoData(
 
   return campaigns;
 }
-
-import { CampaignHierarchy } from "@/types";
 
 export async function fetchKommoHierarchy(
   subdomain: string,
@@ -154,14 +160,14 @@ export async function fetchKommoHierarchy(
   const hierarchy: CampaignHierarchy[] = [];
 
   data.campaigns.forEach((camp, campIndex) => {
-    let campaignName = camp.campaign;
-    if (campaignName === 'unknown_campaign') {
-      campaignName = 'Campanha Desconhecida';
+    // Filtrar campaign desconhecida
+    if (camp.campaign === 'unknown_campaign') {
+      return;
     }
 
     const campaignNode: CampaignHierarchy = {
       id: `kommo-camp-${campIndex}`,
-      name: campaignName,
+      name: camp.campaign,
       type: 'campaign',
       status: 'active',
       data: { stage1: 0, stage2: 0, stage3: 0, stage4: 0, stage5: 0 },
@@ -171,6 +177,11 @@ export async function fetchKommoHierarchy(
     };
 
     camp.groups.forEach((group, groupIndex) => {
+      // Filtrar medium desconhecido
+      if (group.medium === 'unknown_medium') {
+        return;
+      }
+
       const adSetNode: CampaignHierarchy = {
         id: `kommo-adset-${campIndex}-${groupIndex}`,
         name: group.medium || "Sem Grupo",
@@ -183,6 +194,11 @@ export async function fetchKommoHierarchy(
       };
 
       group.ads.forEach((ad, adIndex) => {
+        // Filtrar content desconhecido
+        if (ad.content === 'unknown_content') {
+          return;
+        }
+
         const adNode: CampaignHierarchy = {
           id: `kommo-ad-${campIndex}-${groupIndex}-${adIndex}`,
           name: ad.content || "Anúncio Sem Nome",
