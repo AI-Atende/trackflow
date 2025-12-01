@@ -136,6 +136,7 @@ const HomeContent = () => {
         } else {
             // Se Kommo inativo e selecionado Kommo/Hybrid -> Fallback para Meta
             setDataSource('META');
+            setSelectedCampaignId(null);
             return; // O useEffect vai rodar novamente com dataSource='META'
         }
     };
@@ -551,19 +552,19 @@ const HomeContent = () => {
                             {integrationConfig?.isActive && (
                                 <div className="flex items-center bg-secondary/50 rounded-lg p-1 self-start md:self-auto border border-border glass">
                                     <button
-                                        onClick={() => setDataSource('KOMMO')}
+                                        onClick={() => { setDataSource('KOMMO'); setSelectedCampaignId(null); }}
                                         className={`px-4 py-1.5 text-xs font-medium rounded-md transition-all ${dataSource === 'KOMMO' ? 'bg-brand-500 text-white shadow-lg shadow-brand-500/20' : 'text-muted-foreground hover:text-foreground hover:bg-white/5'}`}
                                     >
                                         Kommo
                                     </button>
                                     <button
-                                        onClick={() => setDataSource('META')}
+                                        onClick={() => { setDataSource('META'); setSelectedCampaignId(null); }}
                                         className={`px-4 py-1.5 text-xs font-medium rounded-md transition-all ${dataSource === 'META' ? 'bg-brand-500 text-white shadow-lg shadow-brand-500/20' : 'text-muted-foreground hover:text-foreground hover:bg-white/5'}`}
                                     >
                                         Meta
                                     </button>
                                     <button
-                                        onClick={() => setDataSource('HYBRID')}
+                                        onClick={() => { setDataSource('HYBRID'); setSelectedCampaignId(null); }}
                                         className={`px-4 py-1.5 text-xs font-medium rounded-md transition-all ${dataSource === 'HYBRID' ? 'bg-brand-500 text-white shadow-lg shadow-brand-500/20' : 'text-muted-foreground hover:text-foreground hover:bg-white/5'}`}
                                     >
                                         Kommo + Meta
