@@ -20,6 +20,26 @@ interface KommoResponse {
   }[];
 }
 
+async function fetchWithRetry(url: string, options: RequestInit, retries = 3, backoff = 1000): Promise<Response> {
+  try {
+    const res = await fetch(url, options);
+    if (!res.ok) {
+      if (retries > 0) {
+        await new Promise(resolve => setTimeout(resolve, backoff));
+        return fetchWithRetry(url, options, retries - 1, backoff * 2);
+      }
+      throw new Error(`Erro na requisição: ${res.status} ${res.statusText}`);
+    }
+    return res;
+  } catch (error) {
+    if (retries > 0) {
+      await new Promise(resolve => setTimeout(resolve, backoff));
+      return fetchWithRetry(url, options, retries - 1, backoff * 2);
+    }
+    throw error;
+  }
+}
+
 export async function fetchKommoData(
   subdomain: string,
   journeyStages: string[],
@@ -36,26 +56,18 @@ export async function fetchKommoData(
 
   if (dateRange) {
     const fromSeconds = Math.floor(dateRange.from.getTime() / 1000);
-    // Ajustar 'to' para o final do dia se necessário, mas como vem do DateRangePicker geralmente já é tratado.
-    // O DateRangePicker retorna 'to' como o dia selecionado. Se for o mesmo dia, pode ser 00:00.
-    // Vamos garantir que 'to' cubra o dia inteiro se for apenas data, mas o backend que decida.
-    // O user pediu apenas para passar os parametros.
     const toSeconds = Math.floor(dateRange.to.getTime() / 1000);
 
     url.searchParams.set("created_at_from", fromSeconds.toString());
     url.searchParams.set("created_at_to", toSeconds.toString());
   }
 
-  const res = await fetch(url.toString(), {
+  const res = await fetchWithRetry(url.toString(), {
     method: "GET",
     headers: {
       "Content-Type": "application/json",
     },
   });
-
-  if (!res.ok) {
-    throw new Error(`Erro ao buscar dados do Kommo: ${res.statusText}`);
-  }
 
   const data: KommoResponse = await res.json();
 
@@ -63,6 +75,13 @@ export async function fetchKommoData(
   const campaigns: AdCampaign[] = [];
 
   data.campaigns.forEach((camp, campIndex) => {
+    // Filtrar ou renomear unknown_campaign
+    let campaignName = camp.campaign;
+    if (campaignName === 'unknown_campaign') {
+      campaignName = 'Campanha Desconhecida';
+      // Ou se preferir não mostrar: return;
+    }
+
     // Inicializar acumuladores para a campanha
     const campaignTotals = {
       stage1: 0,
@@ -93,7 +112,7 @@ export async function fetchKommoData(
     // Adicionar a campanha agregada à lista
     campaigns.push({
       id: `kommo-camp-${campIndex}`,
-      name: camp.campaign, // Nome limpo da campanha
+      name: campaignName,
       status: "active",
       data: {
         stage1: campaignTotals.stage1,
@@ -102,8 +121,6 @@ export async function fetchKommoData(
         stage4: campaignTotals.stage4,
         stage5: campaignTotals.stage5,
       },
-      // Preservar estrutura original em uma propriedade extra se necessário no futuro
-      // (Opcional, mas como a interface AdCampaign é estrita, não vamos adicionar agora para evitar erros de TS)
     });
   });
 
@@ -117,10 +134,6 @@ export async function fetchKommoHierarchy(
   journeyStages: string[],
   dateRange?: { from: Date; to: Date }
 ): Promise<CampaignHierarchy[]> {
-  // Reutilizar a lógica de fetch (idealmente refatorar para uma função privada 'fetchRawKommoData')
-  // Por brevidade, vou duplicar a chamada aqui ou chamar fetchKommoData se ela retornasse o raw.
-  // Como fetchKommoData retorna AdCampaign, vou duplicar a chamada HTTP.
-
   const url = new URL("https://aiatende.dev.br/kommo/api/kommo-leads/aggregated-utm");
   url.searchParams.set("subdomain", subdomain);
   journeyStages.forEach(stage => url.searchParams.append("lead_journey", stage));
@@ -132,20 +145,23 @@ export async function fetchKommoHierarchy(
     url.searchParams.set("created_at_to", toSeconds.toString());
   }
 
-  const res = await fetch(url.toString(), {
+  const res = await fetchWithRetry(url.toString(), {
     method: "GET",
     headers: { "Content-Type": "application/json" },
   });
-
-  if (!res.ok) throw new Error(`Erro ao buscar dados do Kommo: ${res.statusText}`);
 
   const data: KommoResponse = await res.json();
   const hierarchy: CampaignHierarchy[] = [];
 
   data.campaigns.forEach((camp, campIndex) => {
+    let campaignName = camp.campaign;
+    if (campaignName === 'unknown_campaign') {
+      campaignName = 'Campanha Desconhecida';
+    }
+
     const campaignNode: CampaignHierarchy = {
       id: `kommo-camp-${campIndex}`,
-      name: camp.campaign,
+      name: campaignName,
       type: 'campaign',
       status: 'active',
       data: { stage1: 0, stage2: 0, stage3: 0, stage4: 0, stage5: 0 },
@@ -188,8 +204,7 @@ export async function fetchKommoHierarchy(
           });
         }
         // Receita do anúncio (stage5 * 100 ou totalRevenue se disponível)
-        // O type diz totalRevenue, vamos usar.
-        adNode.data.stage5 = ad.totalRevenue ? ad.totalRevenue / 100 : 0; // Se revenue for em centavos? Assumindo logica do frontend anterior (stage5 * 100 = revenue) -> stage5 = revenue / 100
+        adNode.data.stage5 = ad.totalRevenue ? ad.totalRevenue / 100 : 0;
 
         // Somar ao AdSet
         adSetNode.data.stage1 += adNode.data.stage1;
