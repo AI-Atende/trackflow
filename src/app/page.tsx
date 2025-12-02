@@ -154,8 +154,8 @@ const HomeContent = () => {
     const fetchKommoDashboardData = async (journeyMap: string[]) => {
         setIsLoadingData(true);
         try {
-            const since = format(dateRange.from, 'yyyy-MM-dd');
-            const until = format(dateRange.to, 'yyyy-MM-dd');
+            const since = dateRange.from.toISOString();
+            const until = dateRange.to.toISOString();
 
             const res = await fetch(`/api/integrations/kommo/data?since=${since}&until=${until}`);
             if (res.ok) {

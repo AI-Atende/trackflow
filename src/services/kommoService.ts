@@ -55,8 +55,8 @@ export async function fetchKommoData(
   });
 
   if (dateRange) {
-    const fromSeconds = Math.floor(dateRange.from.getTime() / 1000);
-    const toSeconds = Math.floor(dateRange.to.getTime() / 1000);
+    const fromSeconds = dateRange.from.getTime();
+    const toSeconds = dateRange.to.getTime();
 
     url.searchParams.set("created_at_from", fromSeconds.toString());
     url.searchParams.set("created_at_to", toSeconds.toString());
@@ -151,8 +151,8 @@ export async function fetchKommoHierarchy(
   journeyStages.forEach(stage => url.searchParams.append("lead_journey", stage));
 
   if (dateRange) {
-    const fromSeconds = Math.floor(dateRange.from.getTime() / 1000);
-    const toSeconds = Math.floor(dateRange.to.getTime() / 1000);
+    const fromSeconds = dateRange.from.getTime();
+    const toSeconds = dateRange.to.getTime();
     url.searchParams.set("created_at_from", fromSeconds.toString());
     url.searchParams.set("created_at_to", toSeconds.toString());
   }
