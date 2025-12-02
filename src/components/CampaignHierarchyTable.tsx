@@ -95,6 +95,11 @@ const HierarchyRow = ({ node, level, journeyLabels }: { node: CampaignHierarchy,
         <td className="py-3 px-4 text-right font-mono text-sm text-foreground">
           {(node.revenue || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
         </td>
+
+        {/* ROAS */}
+        <td className="py-3 px-4 text-right font-mono text-sm text-foreground">
+          {(node.spend > 0 ? (node.revenue || 0) / node.spend : 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+        </td>
       </tr>
       {expanded && node.children?.map((child) => (
         <HierarchyRow key={child.id} node={child} level={level + 1} journeyLabels={journeyLabels} />
@@ -129,6 +134,7 @@ export const CampaignHierarchyTable: React.FC<Props> = ({ data, loading, journey
                 </th>
               ))}
               <th className="py-4 px-4 font-semibold text-sm text-muted-foreground text-right">Receita</th>
+              <th className="py-4 px-4 font-semibold text-sm text-muted-foreground text-right">ROAS</th>
             </tr>
           </thead>
           <tbody>
