@@ -70,19 +70,73 @@ export async function GET(req: NextRequest) {
             // Note: Merging hierarchies is complex. For now, we'll append and let the user see both if names differ.
             // Or we can try a simple merge on Campaign Name.
 
-            metaData.forEach(mCamp => {
-              const existing = campaigns.find(c => c.name.trim().toLowerCase() === mCamp.name.trim().toLowerCase());
-              if (existing) {
-                // Merge metrics
-                existing.spend += mCamp.spend;
-                existing.metaLeads = mCamp.metaLeads; // Assign Meta leads to existing Kommo campaign
+            // Helper for smart matching
+            const findMatch = (nodes: CampaignHierarchy[], target: CampaignHierarchy, usedIds: Set<string>) => {
+              // 1. Exact Match
+              let match = nodes.find(n => {
+                if (usedIds.has(n.id)) return false;
+                return n.name.trim().toLowerCase() === target.name.trim().toLowerCase();
+              });
 
-                // Note: Stage metrics might mean different things (Kommo=CRM stages, Meta=Impressions/Clicks).
-                // In Dashboard we show them side-by-side or mapped.
-                // Here, we might just want to show them.
-                // If we merge, we might lose the distinction.
-                // Let's just append for now to be safe, or maybe prefix IDs to avoid collision if we didn't already.
-                // IDs are already prefixed in Kommo service ("kommo-camp-..."). Meta IDs are raw.
+              // 2. Smart Match (Contains)
+              if (!match) {
+                match = nodes.find(n => {
+                  if (usedIds.has(n.id)) return false;
+                  const nName = n.name.trim().toLowerCase();
+                  const tName = target.name.trim().toLowerCase();
+                  return nName.includes(tName) || tName.includes(nName);
+                });
+              }
+
+              return match;
+            };
+
+            const usedKommoIds = new Set<string>();
+
+            metaData.forEach(mCamp => {
+              const match = findMatch(campaigns, mCamp, usedKommoIds);
+
+              if (match) {
+                usedKommoIds.add(match.id);
+                // Merge Campaign Metrics
+                match.spend += mCamp.spend;
+                match.metaLeads = mCamp.metaLeads;
+
+                // Merge AdSets
+                if (mCamp.children && mCamp.children.length > 0) {
+                  if (!match.children) match.children = [];
+                  const usedAdSetIds = new Set<string>();
+
+                  mCamp.children.forEach(mAdSet => {
+                    const adSetMatch = findMatch(match.children!, mAdSet, usedAdSetIds);
+
+                    if (adSetMatch) {
+                      usedAdSetIds.add(adSetMatch.id);
+                      adSetMatch.spend += mAdSet.spend;
+                      adSetMatch.metaLeads = mAdSet.metaLeads;
+
+                      // Merge Ads
+                      if (mAdSet.children && mAdSet.children.length > 0) {
+                        if (!adSetMatch.children) adSetMatch.children = [];
+                        const usedAdIds = new Set<string>();
+
+                        mAdSet.children.forEach(mAd => {
+                          const adMatch = findMatch(adSetMatch.children!, mAd, usedAdIds);
+
+                          if (adMatch) {
+                            usedAdIds.add(adMatch.id);
+                            adMatch.spend += mAd.spend;
+                            adMatch.metaLeads = mAd.metaLeads;
+                          } else {
+                            adSetMatch.children!.push(mAd);
+                          }
+                        });
+                      }
+                    } else {
+                      match.children!.push(mAdSet);
+                    }
+                  });
+                }
               } else {
                 campaigns.push(mCamp);
               }
