@@ -68,6 +68,14 @@ const SyncButton = ({ session, onSyncSuccess, dateRange }: { session: any, onSyn
 
 import { usePersistentState } from '@/hooks/usePersistentState';
 
+const dateRangeDeserializer = (stored: string) => {
+    const parsed = JSON.parse(stored);
+    return {
+        from: new Date(parsed.from),
+        to: new Date(parsed.to),
+    };
+};
+
 const HomeContent = () => {
     const { data: session, status } = useSession();
     const router = useRouter();
@@ -95,13 +103,7 @@ const HomeContent = () => {
             from: subDays(new Date(), 30),
             to: new Date(),
         },
-        (stored) => {
-            const parsed = JSON.parse(stored);
-            return {
-                from: new Date(parsed.from),
-                to: new Date(parsed.to),
-            };
-        }
+        dateRangeDeserializer
     );
 
     useEffect(() => {

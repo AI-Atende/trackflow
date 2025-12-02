@@ -12,6 +12,14 @@ import { CampaignHierarchy } from '@/types';
 
 import { usePersistentState } from '@/hooks/usePersistentState';
 
+const dateRangeDeserializer = (stored: string) => {
+  const parsed = JSON.parse(stored);
+  return {
+    from: new Date(parsed.from),
+    to: new Date(parsed.to),
+  };
+};
+
 const CampaignsContent = () => {
   const { data: session, status } = useSession();
   const router = useRouter();
@@ -31,13 +39,7 @@ const CampaignsContent = () => {
       from: subDays(new Date(), 30),
       to: new Date(),
     },
-    (stored) => {
-      const parsed = JSON.parse(stored);
-      return {
-        from: new Date(parsed.from),
-        to: new Date(parsed.to),
-      };
-    }
+    dateRangeDeserializer
   );
 
   const [campaigns, setCampaigns] = useState<CampaignHierarchy[]>([]);
