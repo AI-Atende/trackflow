@@ -52,5 +52,6 @@ export interface CampaignHierarchy {
   spend: number;
   roas: number;
   revenue: number;
+  metaLeads?: number;
   children?: CampaignHierarchy[];
 }

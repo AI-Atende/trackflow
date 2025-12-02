@@ -75,6 +75,8 @@ export async function GET(req: NextRequest) {
               if (existing) {
                 // Merge metrics
                 existing.spend += mCamp.spend;
+                existing.metaLeads = mCamp.metaLeads; // Assign Meta leads to existing Kommo campaign
+
                 // Note: Stage metrics might mean different things (Kommo=CRM stages, Meta=Impressions/Clicks).
                 // In Dashboard we show them side-by-side or mapped.
                 // Here, we might just want to show them.

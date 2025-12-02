@@ -76,6 +76,12 @@ const HierarchyRow = ({ node, level, journeyLabels }: { node: CampaignHierarchy,
         <td className="py-3 px-4 text-right font-mono text-sm text-foreground">
           {node.spend.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
         </td>
+
+        {/* Meta Leads (Stage 0) */}
+        <td className="py-3 px-4 text-right font-mono text-sm text-blue-500 font-bold">
+          {(node.metaLeads || 0).toLocaleString('pt-BR')}
+        </td>
+
         {/* Dynamic Stages */}
         {(journeyLabels || ["I", "II", "III", "IV", "V"]).map((label, index) => {
           const stageKey = `stage${index + 1}` as keyof typeof node.data;
@@ -128,6 +134,7 @@ export const CampaignHierarchyTable: React.FC<Props> = ({ data, loading, journey
               <th className="py-4 px-4 font-semibold text-sm text-muted-foreground w-[40%]">Nome</th>
               <th className="py-4 px-4 font-semibold text-sm text-muted-foreground text-center">Status</th>
               <th className="py-4 px-4 font-semibold text-sm text-muted-foreground text-right">Investimento</th>
+              <th className="py-4 px-4 font-semibold text-sm text-muted-foreground text-right text-blue-500">Meta Leads</th>
               {labels.map((label, index) => (
                 <th key={index} className="py-4 px-4 font-semibold text-sm text-muted-foreground text-right">
                   {toRoman(index + 1)}

@@ -100,6 +100,7 @@ export async function fetchMetaHierarchy(adAccountId: string, since: string, unt
         spend: 0,
         roas: 0,
         revenue: 0,
+        metaLeads: 0,
         children: []
       });
     }
@@ -108,6 +109,7 @@ export async function fetchMetaHierarchy(adAccountId: string, since: string, unt
     camp.data.stage1 += row.impressions;
     camp.data.stage2 += row.clicks;
     camp.data.stage3 += row.leads;
+    camp.metaLeads = (camp.metaLeads || 0) + row.leads;
 
     // 2. AdSet Level
     if (!adSetsMap.has(row.adsetId)) {
@@ -120,6 +122,7 @@ export async function fetchMetaHierarchy(adAccountId: string, since: string, unt
         spend: 0,
         roas: 0,
         revenue: 0,
+        metaLeads: 0,
         children: []
       };
       adSetsMap.set(row.adsetId, adSetNode);
@@ -131,6 +134,7 @@ export async function fetchMetaHierarchy(adAccountId: string, since: string, unt
     adSet.data.stage1 += row.impressions;
     adSet.data.stage2 += row.clicks;
     adSet.data.stage3 += row.leads;
+    adSet.metaLeads = (adSet.metaLeads || 0) + row.leads;
 
     // 3. Ad Level
     if (!adsMap.has(row.adId)) {
@@ -142,7 +146,8 @@ export async function fetchMetaHierarchy(adAccountId: string, since: string, unt
         data: { stage1: 0, stage2: 0, stage3: 0, stage4: 0, stage5: 0 },
         spend: 0,
         roas: 0,
-        revenue: 0
+        revenue: 0,
+        metaLeads: 0
       };
       adsMap.set(row.adId, adNode);
     }
@@ -151,6 +156,7 @@ export async function fetchMetaHierarchy(adAccountId: string, since: string, unt
     ad.data.stage1 += row.impressions;
     ad.data.stage2 += row.clicks;
     ad.data.stage3 += row.leads;
+    ad.metaLeads = (ad.metaLeads || 0) + row.leads;
   }
 
   // Segundo passo: Construir a árvore
@@ -175,6 +181,7 @@ export async function fetchMetaHierarchy(adAccountId: string, since: string, unt
         spend: 0,
         roas: 0,
         revenue: 0,
+        metaLeads: 0,
         children: []
       });
     }
@@ -183,6 +190,7 @@ export async function fetchMetaHierarchy(adAccountId: string, since: string, unt
     campaign.data.stage1 += row.impressions;
     campaign.data.stage2 += row.clicks;
     campaign.data.stage3 += row.leads;
+    campaign.metaLeads = (campaign.metaLeads || 0) + row.leads;
 
     // AdSet
     let adSet = campaign.children?.find(c => c.id === row.adsetId);
@@ -196,6 +204,7 @@ export async function fetchMetaHierarchy(adAccountId: string, since: string, unt
         spend: 0,
         roas: 0,
         revenue: 0,
+        metaLeads: 0,
         children: []
       };
       campaign.children?.push(adSet);
@@ -204,6 +213,7 @@ export async function fetchMetaHierarchy(adAccountId: string, since: string, unt
     adSet.data.stage1 += row.impressions;
     adSet.data.stage2 += row.clicks;
     adSet.data.stage3 += row.leads;
+    adSet.metaLeads = (adSet.metaLeads || 0) + row.leads;
 
     // Ad
     let ad = adSet.children?.find(c => c.id === row.adId);
@@ -216,7 +226,8 @@ export async function fetchMetaHierarchy(adAccountId: string, since: string, unt
         data: { stage1: 0, stage2: 0, stage3: 0, stage4: 0, stage5: 0 },
         spend: 0,
         roas: 0,
-        revenue: 0
+        revenue: 0,
+        metaLeads: 0
       };
       adSet.children?.push(ad);
     }
@@ -224,6 +235,7 @@ export async function fetchMetaHierarchy(adAccountId: string, since: string, unt
     ad.data.stage1 += row.impressions;
     ad.data.stage2 += row.clicks;
     ad.data.stage3 += row.leads;
+    ad.metaLeads = (ad.metaLeads || 0) + row.leads;
   }
 
   return Array.from(hierarchyMap.values());
