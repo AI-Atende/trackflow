@@ -1,7 +1,17 @@
 import React, { useState } from 'react';
 import { ChevronRight, ChevronDown } from 'lucide-react';
 import { CampaignHierarchy } from '@/types';
+import { Tooltip } from './Tooltip';
 import { useToast } from '@/contexts/ToastContext';
+
+const toRoman = (num: number): string => {
+  const map: { [key: number]: string } = {
+    1: 'I', 2: 'II', 3: 'III', 4: 'IV', 5: 'V',
+    6: 'VI', 7: 'VII', 8: 'VIII', 9: 'IX', 10: 'X',
+    11: 'XI', 12: 'XII'
+  };
+  return map[num] || num.toString();
+};
 
 interface Props {
   data: CampaignHierarchy[];
@@ -111,7 +121,11 @@ export const CampaignHierarchyTable: React.FC<Props> = ({ data, loading, journey
               <th className="py-4 px-4 font-semibold text-sm text-muted-foreground text-right">Investimento</th>
               {labels.map((label, index) => (
                 <th key={index} className="py-4 px-4 font-semibold text-sm text-muted-foreground text-right">
-                  {label || ["I", "II", "III", "IV", "V"][index]}
+                  <Tooltip content={label}>
+                    <span className="cursor-help border-b border-dotted border-muted-foreground/50">
+                      {toRoman(index + 1)}
+                    </span>
+                  </Tooltip>
                 </th>
               ))}
               <th className="py-4 px-4 font-semibold text-sm text-muted-foreground text-right">Receita</th>

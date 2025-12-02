@@ -33,6 +33,8 @@ export interface MetricSummary {
   value: string;
   trend: 'up' | 'down' | 'neutral';
   percentage: string;
+  tooltip?: string;
+  icon?: string;
 }
 
 export interface CampaignHierarchy {

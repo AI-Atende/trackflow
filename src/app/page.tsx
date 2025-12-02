@@ -14,6 +14,7 @@ import { AiInsights } from '@/components/AiInsights';
 import { useSearchParams } from 'next/navigation';
 import { useToast } from '@/contexts/ToastContext';
 import { useTheme } from '@/contexts/ThemeContext';
+import { MetricSummary } from '@/types';
 
 const SyncButton = ({ session, onSyncSuccess, dateRange }: { session: any, onSyncSuccess?: () => void, dateRange: DateRange }) => {
     const [isSyncing, setIsSyncing] = useState(false);
@@ -141,6 +142,15 @@ const HomeContent = () => {
         }
     };
 
+    const toRoman = (num: number): string => {
+        const map: { [key: number]: string } = {
+            1: 'I', 2: 'II', 3: 'III', 4: 'IV', 5: 'V',
+            6: 'VI', 7: 'VII', 8: 'VIII', 9: 'IX', 10: 'X',
+            11: 'XI', 12: 'XII'
+        };
+        return map[num] || num.toString();
+    };
+
     const fetchKommoDashboardData = async (journeyMap: string[]) => {
         setIsLoadingData(true);
         try {
@@ -169,8 +179,9 @@ const HomeContent = () => {
                     campaigns.reduce((acc: number, c: any) => acc + c.data.stage5, 0),
                 ];
 
-                const baseMetrics = journeyMap.map((label, index) => ({
-                    label: label || `Etapa ${index + 1}`,
+                const baseMetrics: MetricSummary[] = journeyMap.map((label, index) => ({
+                    label: toRoman(index + 1),
+                    tooltip: label || `Etapa ${index + 1}`,
                     value: stageTotals[index].toLocaleString('pt-BR'),
                     percentage: "+0%",
                     trend: "up",
@@ -250,7 +261,7 @@ const HomeContent = () => {
                 const totalClicks = formattedCampaigns.reduce((acc: number, c: any) => acc + c.data.stage2, 0);
                 const totalLeads = formattedCampaigns.reduce((acc: number, c: any) => acc + c.data.stage3, 0);
 
-                const baseMetrics = [
+                const baseMetrics: MetricSummary[] = [
                     {
                         label: "Investimento Total",
                         value: `R$ ${totalSpend.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`,
@@ -259,21 +270,24 @@ const HomeContent = () => {
                         icon: "DollarSign"
                     },
                     {
-                        label: "Impressões",
+                        label: "I",
+                        tooltip: "Impressões",
                         value: totalImpressions.toLocaleString('pt-BR'),
                         percentage: "+0%",
                         trend: "up",
                         icon: "Eye"
                     },
                     {
-                        label: "Cliques",
+                        label: "II",
+                        tooltip: "Cliques",
                         value: totalClicks.toLocaleString('pt-BR'),
                         percentage: "+0%",
                         trend: "up",
                         icon: "MousePointer"
                     },
                     {
-                        label: "Leads",
+                        label: "III",
+                        tooltip: "Leads",
                         value: totalLeads.toLocaleString('pt-BR'),
                         percentage: "+0%",
                         trend: "up",
@@ -368,7 +382,7 @@ const HomeContent = () => {
             </aside>
 
             {/* Desktop Sidebar */}
-            <aside className="w-64 bg-card border-r border-border text-card-foreground flex flex-col shadow-xl z-20 hidden md:flex glass">
+            <aside className="w-64 bg-card border-r border-border text-card-foreground flex flex-col shadow-xl z-20 hidden md:flex glass shrink-0">
                 <div className="p-6 border-b border-border flex items-center gap-3">
                     <div className="w-8 h-8 bg-brand-500 rounded-lg flex items-center justify-center shadow-lg shadow-brand-500/20">
                         <LayoutDashboard className="text-white" size={20} />
@@ -435,7 +449,7 @@ const HomeContent = () => {
             </aside>
 
             {/* Main Content */}
-            <main className="flex-1 flex flex-col h-screen relative">
+            <main className="flex-1 flex flex-col h-screen relative overflow-x-hidden">
                 {/* Header */}
                 <header className="h-16 bg-card/80 backdrop-blur-md border-b border-border flex items-center justify-between px-4 md:px-8 shadow-sm z-30 sticky top-0">
                     <div className="flex items-center gap-4">

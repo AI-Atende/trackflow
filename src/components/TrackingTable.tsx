@@ -1,8 +1,18 @@
 import React from 'react';
 import { AdCampaign } from '../types';
 import { ChevronRight } from 'lucide-react';
+import { Tooltip } from './Tooltip';
 import { Skeleton } from './Skeleton';
 import { useToast } from '@/contexts/ToastContext';
+
+const toRoman = (num: number): string => {
+  const map: { [key: number]: string } = {
+    1: 'I', 2: 'II', 3: 'III', 4: 'IV', 5: 'V',
+    6: 'VI', 7: 'VII', 8: 'VIII', 9: 'IX', 10: 'X',
+    11: 'XI', 12: 'XII'
+  };
+  return map[num] || num.toString();
+};
 
 interface TrackingTableProps {
   data: AdCampaign[];
@@ -22,7 +32,7 @@ const formatCurrency = (num: number) => {
 };
 
 export const TrackingTable: React.FC<TrackingTableProps> = ({ data, onSelect, selectedId, journeyLabels, dataSource = 'META', loading }) => {
-  const labels = journeyLabels || ["I", "II", "III", "IV", "V"];
+  const labels = journeyLabels || ["Impressões", "Cliques", "Leads", "Checkout", "Vendas"];
   const { showToast } = useToast();
 
   const handleCopy = (e: React.MouseEvent, text: string) => {
@@ -45,11 +55,11 @@ export const TrackingTable: React.FC<TrackingTableProps> = ({ data, onSelect, se
                     <th scope="col" className="px-4 py-3 md:px-6 md:py-4 text-center">ROAS</th>
                   </>
                 )}
-                <th scope="col" className="px-4 py-3 md:px-6 md:py-4 text-center text-brand-600 bg-brand-50/10">{labels[0] || "I"}</th>
-                <th scope="col" className="px-4 py-3 md:px-6 md:py-4 text-center">{labels[1] || "II"}</th>
-                <th scope="col" className="px-4 py-3 md:px-6 md:py-4 text-center">{labels[2] || "III"}</th>
-                <th scope="col" className="px-4 py-3 md:px-6 md:py-4 text-center">{labels[3] || "IV"}</th>
-                <th scope="col" className="px-4 py-3 md:px-6 md:py-4 text-center">{labels[4] || "V"}</th>
+                <th scope="col" className="px-4 py-3 md:px-6 md:py-4 text-center text-brand-600 bg-brand-50/10">I</th>
+                <th scope="col" className="px-4 py-3 md:px-6 md:py-4 text-center">II</th>
+                <th scope="col" className="px-4 py-3 md:px-6 md:py-4 text-center">III</th>
+                <th scope="col" className="px-4 py-3 md:px-6 md:py-4 text-center">IV</th>
+                <th scope="col" className="px-4 py-3 md:px-6 md:py-4 text-center">V</th>
                 <th scope="col" className="px-4 py-3 md:px-6 md:py-4 text-right">Ação</th>
               </tr>
             </thead>
@@ -93,7 +103,11 @@ export const TrackingTable: React.FC<TrackingTableProps> = ({ data, onSelect, se
               )}
               {labels.map((label, index) => (
                 <th key={index} scope="col" className="px-4 py-3 md:px-6 md:py-4 text-center">
-                  {label || ["I", "II", "III", "IV", "V"][index]}
+                  <Tooltip content={label}>
+                    <span className="cursor-help border-b border-dotted border-muted-foreground/50">
+                      {toRoman(index + 1)}
+                    </span>
+                  </Tooltip>
                 </th>
               ))}
               <th scope="col" className="px-4 py-3 md:px-6 md:py-4 text-center text-brand-500">Receita</th>
