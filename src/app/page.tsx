@@ -180,8 +180,7 @@ const HomeContent = () => {
                 ];
 
                 const baseMetrics: MetricSummary[] = journeyMap.map((label, index) => ({
-                    label: toRoman(index + 1),
-                    tooltip: label || `Etapa ${index + 1}`,
+                    label: label || `Etapa ${index + 1}`,
                     value: stageTotals[index].toLocaleString('pt-BR'),
                     percentage: "+0%",
                     trend: "up",
@@ -270,24 +269,21 @@ const HomeContent = () => {
                         icon: "DollarSign"
                     },
                     {
-                        label: "I",
-                        tooltip: "Impressões",
+                        label: "Impressões",
                         value: totalImpressions.toLocaleString('pt-BR'),
                         percentage: "+0%",
                         trend: "up",
                         icon: "Eye"
                     },
                     {
-                        label: "II",
-                        tooltip: "Cliques",
+                        label: "Cliques",
                         value: totalClicks.toLocaleString('pt-BR'),
                         percentage: "+0%",
                         trend: "up",
                         icon: "MousePointer"
                     },
                     {
-                        label: "III",
-                        tooltip: "Leads",
+                        label: "Leads",
                         value: totalLeads.toLocaleString('pt-BR'),
                         percentage: "+0%",
                         trend: "up",

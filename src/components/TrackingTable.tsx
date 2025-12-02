@@ -103,7 +103,7 @@ export const TrackingTable: React.FC<TrackingTableProps> = ({ data, onSelect, se
               )}
               {labels.map((label, index) => (
                 <th key={index} scope="col" className="px-4 py-3 md:px-6 md:py-4 text-center">
-                  <Tooltip content={label}>
+                  <Tooltip content={label} position="bottom">
                     <span className="cursor-help border-b border-dotted border-muted-foreground/50">
                       {toRoman(index + 1)}
                     </span>

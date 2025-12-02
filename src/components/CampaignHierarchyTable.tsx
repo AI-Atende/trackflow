@@ -121,7 +121,7 @@ export const CampaignHierarchyTable: React.FC<Props> = ({ data, loading, journey
               <th className="py-4 px-4 font-semibold text-sm text-muted-foreground text-right">Investimento</th>
               {labels.map((label, index) => (
                 <th key={index} className="py-4 px-4 font-semibold text-sm text-muted-foreground text-right">
-                  <Tooltip content={label}>
+                  <Tooltip content={label} position="bottom">
                     <span className="cursor-help border-b border-dotted border-muted-foreground/50">
                       {toRoman(index + 1)}
                     </span>
