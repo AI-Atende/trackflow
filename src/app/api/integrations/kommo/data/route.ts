@@ -42,7 +42,13 @@ export async function GET(req: NextRequest) {
     let metaCampaigns: any[] = [];
     if (adAccountId && since && until) {
       try {
-        metaCampaigns = await fetchMetaCampaigns(adAccountId, since, until);
+        const sinceDate = new Date(since);
+        const untilDate = new Date(until);
+        // Meta service expects yyyy-MM-dd
+        const sinceStr = sinceDate.toISOString().split('T')[0];
+        const untilStr = untilDate.toISOString().split('T')[0];
+
+        metaCampaigns = await fetchMetaCampaigns(adAccountId, sinceStr, untilStr);
       } catch (err) {
         console.error("Erro ao buscar dados do Meta para fusão:", err);
       }

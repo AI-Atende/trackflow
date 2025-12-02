@@ -63,8 +63,8 @@ const CampaignsContent = () => {
 
     // 2. Fetch Data
     try {
-      const since = dateRange.from.toISOString();
-      const until = dateRange.to.toISOString();
+      const since = format(dateRange.from, 'yyyy-MM-dd');
+      const until = format(dateRange.to, 'yyyy-MM-dd');
 
       // Se Kommo inativo e selecionado Kommo, fallback para Meta?
       // Ou mostrar erro? O dashboard faz fallback. Vamos fazer fallback também.
