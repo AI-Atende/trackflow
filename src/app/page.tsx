@@ -600,7 +600,7 @@ const HomeContent = () => {
                     <section>
                         <div className="flex items-center justify-between mb-4">
                             <h2 className="text-lg font-bold text-foreground">Rastreamento de Campanhas</h2>
-                            <div className="flex gap-2">
+                            <div className="flex gap-2 flex-wrap justify-end">
                                 {/* Legenda dinâmica */}
                                 {(dataSource === 'META' ? ["Impressões", "Cliques", "Leads", "-", "-"] : (integrationConfig?.journeyMap || ["Impressões / Alcance", "Cliques / Interesse", "Leads / Cadastro", "Checkout Iniciado", "Compra Realizada"])).map((label, idx) => (
                                     <div
