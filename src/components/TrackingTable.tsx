@@ -96,8 +96,10 @@ export const TrackingTable: React.FC<TrackingTableProps> = ({ data, onSelect, se
             <tr>
               <th scope="col" className="px-4 py-3 md:px-6 md:py-4">Campanha</th>
               {(dataSource === 'HYBRID' || dataSource === 'META') && (
+                <th scope="col" className="px-4 py-3 md:px-6 md:py-4 text-center">Investimento</th>
+              )}
+              {dataSource === 'HYBRID' && (
                 <>
-                  <th scope="col" className="px-4 py-3 md:px-6 md:py-4 text-center">Investimento</th>
                   <th scope="col" className="px-4 py-3 md:px-6 md:py-4 text-center">ROAS</th>
                   <th scope="col" className="px-4 py-3 md:px-6 md:py-4 text-center text-blue-500">Meta Leads</th>
                 </>
@@ -136,10 +138,13 @@ export const TrackingTable: React.FC<TrackingTableProps> = ({ data, onSelect, se
                   </td>
 
                   {(dataSource === 'HYBRID' || dataSource === 'META') && (
+                    <td className="px-4 py-3 md:px-6 md:py-4 text-center text-foreground font-medium">
+                      {formatCurrency(ad.spend || 0)}
+                    </td>
+                  )}
+
+                  {dataSource === 'HYBRID' && (
                     <>
-                      <td className="px-4 py-3 md:px-6 md:py-4 text-center text-foreground font-medium">
-                        {formatCurrency(ad.spend || 0)}
-                      </td>
                       <td className="px-4 py-3 md:px-6 md:py-4 text-center">
                         {(() => {
                           const spend = ad.spend || 0;

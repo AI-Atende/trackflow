@@ -67,12 +67,19 @@ export async function GET(req: NextRequest) {
       const kName = kCamp.name.trim().toLowerCase();
 
       // Encontrar correspondência exata que ainda não foi usada
-      const match = metaCampaigns.find((mCamp: any) => {
+      let match = metaCampaigns.find((mCamp: any) => {
         if (usedMetaIds.has(mCamp.id)) return false;
-
-        const mName = mCamp.name.trim().toLowerCase();
-        return mName === kName;
+        return mCamp.name.trim().toLowerCase() === kName;
       });
+
+      // Se não houver correspondência exata, tentar "Smart Match" (contém)
+      if (!match) {
+        match = metaCampaigns.find((mCamp: any) => {
+          if (usedMetaIds.has(mCamp.id)) return false;
+          const mName = mCamp.name.trim().toLowerCase();
+          return kName.includes(mName) || mName.includes(kName);
+        });
+      }
 
       if (match) {
         usedMetaIds.add(match.id);

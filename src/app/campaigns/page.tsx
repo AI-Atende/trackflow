@@ -300,6 +300,7 @@ const CampaignsContent = () => {
             data={filteredCampaigns}
             loading={isLoading}
             journeyLabels={dataSource === 'META' ? undefined : integrationConfig?.journeyMap}
+            dataSource={dataSource}
           />
         </div>
       </main>

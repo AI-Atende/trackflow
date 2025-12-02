@@ -17,9 +17,10 @@ interface Props {
   data: CampaignHierarchy[];
   loading: boolean;
   journeyLabels?: string[]; // Labels for columns (I, II, III...)
+  dataSource?: 'KOMMO' | 'META' | 'HYBRID';
 }
 
-const HierarchyRow = ({ node, level, journeyLabels }: { node: CampaignHierarchy, level: number, journeyLabels?: string[] }) => {
+const HierarchyRow = ({ node, level, journeyLabels, dataSource }: { node: CampaignHierarchy, level: number, journeyLabels?: string[], dataSource?: 'KOMMO' | 'META' | 'HYBRID' }) => {
   const [expanded, setExpanded] = useState(false);
   const { showToast } = useToast();
   const hasChildren = node.children && node.children.length > 0;
@@ -78,9 +79,11 @@ const HierarchyRow = ({ node, level, journeyLabels }: { node: CampaignHierarchy,
         </td>
 
         {/* Meta Leads (Stage 0) */}
-        <td className="py-3 px-4 text-right font-mono text-sm text-blue-500 font-bold">
-          {(node.metaLeads || 0).toLocaleString('pt-BR')}
-        </td>
+        {dataSource === 'HYBRID' && (
+          <td className="py-3 px-4 text-right font-mono text-sm text-blue-500 font-bold">
+            {(node.metaLeads || 0).toLocaleString('pt-BR')}
+          </td>
+        )}
 
         {/* Dynamic Stages */}
         {(journeyLabels || ["I", "II", "III", "IV", "V"]).map((label, index) => {
@@ -103,9 +106,11 @@ const HierarchyRow = ({ node, level, journeyLabels }: { node: CampaignHierarchy,
         </td>
 
         {/* ROAS */}
-        <td className="py-3 px-4 text-right font-mono text-sm text-foreground">
-          {(node.spend > 0 ? (node.revenue || 0) / node.spend : 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-        </td>
+        {dataSource === 'HYBRID' && (
+          <td className="py-3 px-4 text-right font-mono text-sm text-foreground">
+            {(node.spend > 0 ? (node.revenue || 0) / node.spend : 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          </td>
+        )}
       </tr>
       {expanded && node.children?.map((child) => (
         <HierarchyRow key={child.id} node={child} level={level + 1} journeyLabels={journeyLabels} />
@@ -114,7 +119,7 @@ const HierarchyRow = ({ node, level, journeyLabels }: { node: CampaignHierarchy,
   );
 };
 
-export const CampaignHierarchyTable: React.FC<Props> = ({ data, loading, journeyLabels }) => {
+export const CampaignHierarchyTable: React.FC<Props> = ({ data, loading, journeyLabels, dataSource }) => {
   const labels = journeyLabels || ["Impressões", "Cliques", "Leads", "Checkout", "Vendas"];
 
   if (loading) {
@@ -134,14 +139,18 @@ export const CampaignHierarchyTable: React.FC<Props> = ({ data, loading, journey
               <th className="py-4 px-4 font-semibold text-sm text-muted-foreground w-[40%]">Nome</th>
               <th className="py-4 px-4 font-semibold text-sm text-muted-foreground text-center">Status</th>
               <th className="py-4 px-4 font-semibold text-sm text-muted-foreground text-right">Investimento</th>
-              <th className="py-4 px-4 font-semibold text-sm text-muted-foreground text-right text-blue-500">Meta Leads</th>
+              {dataSource === 'HYBRID' && (
+                <th className="py-4 px-4 font-semibold text-sm text-muted-foreground text-right text-blue-500">Meta Leads</th>
+              )}
               {labels.map((label, index) => (
                 <th key={index} className="py-4 px-4 font-semibold text-sm text-muted-foreground text-right">
                   {toRoman(index + 1)}
                 </th>
               ))}
               <th className="py-4 px-4 font-semibold text-sm text-muted-foreground text-right">Receita</th>
-              <th className="py-4 px-4 font-semibold text-sm text-muted-foreground text-right">ROAS</th>
+              {dataSource === 'HYBRID' && (
+                <th className="py-4 px-4 font-semibold text-sm text-muted-foreground text-right">ROAS</th>
+              )}
             </tr>
           </thead>
           <tbody>
@@ -153,7 +162,7 @@ export const CampaignHierarchyTable: React.FC<Props> = ({ data, loading, journey
               </tr>
             ) : (
               data.map((campaign) => (
-                <HierarchyRow key={campaign.id} node={campaign} level={0} journeyLabels={labels} />
+                <HierarchyRow key={campaign.id} node={campaign} level={0} journeyLabels={labels} dataSource={dataSource} />
               ))
             )}
           </tbody>
