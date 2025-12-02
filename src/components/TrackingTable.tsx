@@ -103,11 +103,7 @@ export const TrackingTable: React.FC<TrackingTableProps> = ({ data, onSelect, se
               )}
               {labels.map((label, index) => (
                 <th key={index} scope="col" className="px-4 py-3 md:px-6 md:py-4 text-center">
-                  <Tooltip content={label} position="bottom">
-                    <span className="cursor-help border-b border-dotted border-muted-foreground/50">
-                      {toRoman(index + 1)}
-                    </span>
-                  </Tooltip>
+                  {toRoman(index + 1)}
                 </th>
               ))}
               <th scope="col" className="px-4 py-3 md:px-6 md:py-4 text-center text-brand-500">Receita</th>
@@ -153,16 +149,16 @@ export const TrackingTable: React.FC<TrackingTableProps> = ({ data, onSelect, se
                   )}
 
                   {/* Dynamic Stages */}
-                  {labels.map((_, index) => {
+                  {labels.map((label, index) => {
                     const stageKey = `stage${index + 1}` as keyof typeof ad.data;
                     const value = ad.data[stageKey];
-                    // Calculate percentage for bar (relative to stage 1 or previous stage?)
-                    // Let's keep it simple: just show the number. 
-                    // If index is 1 (Stage II), we had a bar before. We can try to keep it if we want, but dynamic is harder.
-                    // For now, simple number display.
                     return (
                       <td key={index} className="px-4 py-3 md:px-6 md:py-4 text-center">
-                        <span className="text-muted-foreground">{formatNumber(value)}</span>
+                        <Tooltip content={label} position="top">
+                          <span className="text-muted-foreground cursor-help border-b border-dotted border-muted-foreground/50">
+                            {formatNumber(value)}
+                          </span>
+                        </Tooltip>
                       </td>
                     );
                   })}
