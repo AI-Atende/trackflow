@@ -60,16 +60,23 @@ export async function GET(req: NextRequest) {
     }
 
     // 3. Mesclar dados (Left Join: Kommo <- Meta)
+    const usedMetaIds = new Set<string>();
+
     const enrichedCampaigns = kommoCampaigns.map(kCamp => {
       // Normalizar nomes para comparação (remover espaços extras, lowercase)
       const kName = kCamp.name.trim().toLowerCase();
 
-      // Tentar encontrar correspondência exata ou parcial
-      const match = metaCampaigns.find((mCamp: any) =>
-        mCamp.name.trim().toLowerCase() === kName ||
-        kName.includes(mCamp.name.trim().toLowerCase()) ||
-        mCamp.name.trim().toLowerCase().includes(kName)
-      );
+      // Encontrar correspondência exata que ainda não foi usada
+      const match = metaCampaigns.find((mCamp: any) => {
+        if (usedMetaIds.has(mCamp.id)) return false;
+
+        const mName = mCamp.name.trim().toLowerCase();
+        return mName === kName;
+      });
+
+      if (match) {
+        usedMetaIds.add(match.id);
+      }
 
       const spend = match ? match.spend : 0;
       const metaLeads = match ? match.metaLeads : 0;
