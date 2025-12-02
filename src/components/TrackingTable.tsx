@@ -140,10 +140,16 @@ export const TrackingTable: React.FC<TrackingTableProps> = ({ data, onSelect, se
                         {formatCurrency(ad.spend || 0)}
                       </td>
                       <td className="px-4 py-3 md:px-6 md:py-4 text-center">
-                        <span className={`px-2 py-1 rounded-full text-xs font-bold ${(ad.roas || 0) >= 1 ? 'bg-green-500/10 text-green-500' : 'bg-red-500/10 text-red-500'
-                          }`}>
-                          {(ad.roas || 0).toFixed(2)}x
-                        </span>
+                        {(() => {
+                          const spend = ad.spend || 0;
+                          const roas = spend > 0 ? (ad.revenue || 0) / spend : 0;
+                          return (
+                            <span className={`px-2 py-1 rounded-full text-xs font-bold ${roas >= 1 ? 'bg-green-500/10 text-green-500' : 'bg-red-500/10 text-red-500'
+                              }`}>
+                              {roas.toFixed(2)}x
+                            </span>
+                          );
+                        })()}
                       </td>
                     </>
                   )}
