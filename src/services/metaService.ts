@@ -46,6 +46,9 @@ export async function fetchMetaCampaigns(adAccountId: string, since: string, unt
         totalLeads: row.leads,
       });
     } else {
+      existing.totalSpend += row.spend;
+      existing.totalImpressions += row.impressions;
+      existing.totalClicks += row.clicks;
       existing.totalLeads += row.leads;
     }
   }

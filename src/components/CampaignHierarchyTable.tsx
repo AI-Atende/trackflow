@@ -113,7 +113,7 @@ const HierarchyRow = ({ node, level, journeyLabels, dataSource }: { node: Campai
         )}
       </tr>
       {expanded && node.children?.map((child) => (
-        <HierarchyRow key={child.id} node={child} level={level + 1} journeyLabels={journeyLabels} />
+        <HierarchyRow key={child.id} node={child} level={level + 1} journeyLabels={journeyLabels} dataSource={dataSource} />
       ))}
     </>
   );

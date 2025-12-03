@@ -197,37 +197,43 @@ const HomeContent = () => {
                     campaigns.reduce((acc: number, c: any) => acc + c.data.stage5, 0),
                 ];
 
-                const baseMetrics: MetricSummary[] = journeyMap.map((label, index) => ({
-                    label: label || `Etapa ${index + 1}`,
-                    value: stageTotals[index].toLocaleString('pt-BR'),
-                    percentage: "+0%",
-                    trend: "up",
-                    icon: ["Users", "Filter", "CheckCircle", "Target", "Award"][index] || "Activity"
-                }));
+                const baseMetrics: MetricSummary[] = journeyMap.map((label, index) => {
+                    const value = stageTotals[index];
+                    const stage1Value = stageTotals[0];
+                    const percentage = stage1Value > 0 ? (value / stage1Value) * 100 : 0;
+
+                    return {
+                        label: label || `Etapa ${index + 1}`,
+                        value: value.toLocaleString('pt-BR'),
+                        percentage: `${percentage.toFixed(2)}%`,
+                        trend: "neutral", // Removed trend logic as it's now conversion rate
+                        icon: ["Users", "Filter", "CheckCircle", "Target", "Award"][index] || "Activity"
+                    };
+                });
 
                 baseMetrics.push({
                     label: "Receita Total",
                     value: `R$ ${totalRevenue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`,
-                    percentage: "+0%",
-                    trend: "up",
+                    percentage: "",
+                    trend: "neutral",
                     icon: "DollarSign"
                 });
 
                 if (dataSource === 'HYBRID') {
-                    // Adicionar Investimento e ROAS no início
-                    baseMetrics.unshift({
-                        label: "ROAS Geral",
-                        value: `${totalROAS.toFixed(2)}x`,
-                        percentage: "+0%",
-                        trend: totalROAS >= 1 ? "up" : "down",
-                        icon: "TrendingUp"
-                    });
-                    baseMetrics.unshift({
+                    // Adicionar Investimento e ROAS após as métricas de jornada
+                    baseMetrics.push({
                         label: "Investimento Total",
                         value: `R$ ${totalSpend.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`,
-                        percentage: "+0%",
-                        trend: "up",
+                        percentage: "",
+                        trend: "neutral",
                         icon: "DollarSign"
+                    });
+                    baseMetrics.push({
+                        label: "ROAS Geral",
+                        value: `${totalROAS.toFixed(2)}x`,
+                        percentage: "",
+                        trend: "neutral",
+                        icon: "TrendingUp"
                     });
                 }
 
@@ -280,32 +286,32 @@ const HomeContent = () => {
 
                 const baseMetrics: MetricSummary[] = [
                     {
-                        label: "Investimento Total",
-                        value: `R$ ${totalSpend.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`,
-                        percentage: "+0%",
-                        trend: "up",
-                        icon: "DollarSign"
-                    },
-                    {
                         label: "Impressões",
                         value: totalImpressions.toLocaleString('pt-BR'),
-                        percentage: "+0%",
-                        trend: "up",
+                        percentage: "100%", // Always 100% of itself
+                        trend: "neutral",
                         icon: "Eye"
                     },
                     {
                         label: "Cliques",
                         value: totalClicks.toLocaleString('pt-BR'),
-                        percentage: "+0%",
-                        trend: "up",
+                        percentage: totalImpressions > 0 ? `${((totalClicks / totalImpressions) * 100).toFixed(2)}%` : "0%",
+                        trend: "neutral",
                         icon: "MousePointer"
                     },
                     {
                         label: "Leads",
                         value: totalLeads.toLocaleString('pt-BR'),
-                        percentage: "+0%",
-                        trend: "up",
+                        percentage: totalImpressions > 0 ? `${((totalLeads / totalImpressions) * 100).toFixed(2)}%` : "0%",
+                        trend: "neutral",
                         icon: "Users"
+                    },
+                    {
+                        label: "Investimento Total",
+                        value: `R$ ${totalSpend.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`,
+                        percentage: "",
+                        trend: "neutral",
+                        icon: "DollarSign"
                     }
                 ];
 

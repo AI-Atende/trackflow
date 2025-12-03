@@ -36,13 +36,11 @@ export const MetricCard: React.FC<MetricCardProps> = ({ metric, loading, tooltip
       </div>
       <div className="mt-2 flex items-baseline justify-between">
         <h3 className="text-2xl font-bold text-card-foreground">{metric.value}</h3>
-        <div className={`flex items-center text-sm font-medium ${metric.trend === 'up' ? 'text-brand-500' :
-          metric.trend === 'down' ? 'text-destructive' : 'text-muted-foreground'
-          }`}>
+        <div className="flex items-center text-sm font-medium text-brand-600">
           {metric.trend === 'up' && <ArrowUpRight size={16} className="mr-1" />}
           {metric.trend === 'down' && <ArrowDownRight size={16} className="mr-1" />}
           {metric.trend === 'neutral' && <Minus size={16} className="mr-1" />}
-          {metric.percentage}
+          <span>{metric.percentage}</span>
         </div>
       </div>
     </div>
