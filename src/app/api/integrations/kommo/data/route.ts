@@ -62,22 +62,24 @@ export async function GET(req: NextRequest) {
     // 3. Mesclar dados (Left Join: Kommo <- Meta)
     const usedMetaIds = new Set<string>();
 
-    const enrichedCampaigns = kommoCampaigns.map(kCamp => {
-      // Normalizar nomes para comparação (remover espaços extras, lowercase)
-      const kName = kCamp.name.trim().toLowerCase();
+    const normalizeString = (str: string) => str.toLowerCase().replace(/[^a-z0-9]/g, "");
 
-      // Encontrar TODAS as correspondências exatas que ainda não foram usadas
+    const enrichedCampaigns = kommoCampaigns.map(kCamp => {
+      // Normalizar nomes para comparação (remover tudo que não for alfanumérico)
+      const kNameClean = normalizeString(kCamp.name);
+
+      // Encontrar TODAS as correspondências exatas (pelo nome limpo) que ainda não foram usadas
       let matches = metaCampaigns.filter((mCamp: any) => {
         if (usedMetaIds.has(mCamp.id)) return false;
-        return mCamp.name.trim().toLowerCase() === kName;
+        return normalizeString(mCamp.name) === kNameClean;
       });
 
-      // Se não houver correspondência exata, tentar "Smart Match" (contém) - Agregando TODOS os matches
+      // Se não houver correspondência exata, tentar "Smart Match" (contém) com nome limpo
       if (matches.length === 0) {
         matches = metaCampaigns.filter((mCamp: any) => {
           if (usedMetaIds.has(mCamp.id)) return false;
-          const mName = mCamp.name.trim().toLowerCase();
-          return kName.includes(mName) || mName.includes(kName);
+          const mNameClean = normalizeString(mCamp.name);
+          return kNameClean.includes(mNameClean) || mNameClean.includes(kNameClean);
         });
       }
 

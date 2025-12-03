@@ -70,24 +70,27 @@ export async function GET(req: NextRequest) {
             // Note: Merging hierarchies is complex. For now, we'll append and let the user see both if names differ.
             // Or we can try a simple merge on Campaign Name.
 
+            const normalizeString = (str: string) => str.toLowerCase().replace(/[^a-z0-9]/g, "");
+
             // Helper for smart matching - Returns ALL matches
             const findMatches = (nodes: CampaignHierarchy[], target: CampaignHierarchy, usedIds: Set<string>) => {
+              const targetNameClean = normalizeString(target.name);
+
               // 1. Exact Match
               let matches = nodes.filter(n => {
                 if (usedIds.has(n.id)) return false;
-                return n.name.trim().toLowerCase() === target.name.trim().toLowerCase();
+                return normalizeString(n.name) === targetNameClean;
               });
 
               // 2. Smart Match (Contains)
               if (matches.length === 0) {
                 matches = nodes.filter(n => {
                   if (usedIds.has(n.id)) return false;
-                  const nName = n.name.trim().toLowerCase();
-                  const tName = target.name.trim().toLowerCase();
-                  return nName.includes(tName) || tName.includes(nName);
+                  const nNameClean = normalizeString(n.name);
+                  return nNameClean.includes(targetNameClean) || targetNameClean.includes(nNameClean);
                 });
               }
-              
+
               return matches;
             };
 
