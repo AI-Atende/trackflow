@@ -22,7 +22,7 @@ interface TrackingTableProps {
   dataSource?: 'KOMMO' | 'META' | 'HYBRID';
   loading?: boolean;
   goals?: any[];
-  selectedGoalType?: 'ROAS' | 'CPA';
+  selectedGoalType?: 'ROAS' | 'CPA' | 'REVENUE';
 }
 
 const formatNumber = (num: number) => {
@@ -43,11 +43,11 @@ export const TrackingTable: React.FC<TrackingTableProps> = ({ data, onSelect, se
     showToast(`"${text}" copiado!`, "success");
   };
 
-  const getGoalValue = (type: 'ROAS' | 'CPA', stageIndex?: number) => {
+  const getGoalValue = (type: 'ROAS' | 'CPA' | 'REVENUE', stageIndex?: number) => {
     const safeGoals = Array.isArray(goals) ? goals : [];
     const goal = safeGoals.find(g => g.type === type && (stageIndex === undefined || g.stageIndex === stageIndex));
-    // Defaults: ROAS 5, CPA 50
-    return goal ? goal.value : (type === 'ROAS' ? 5.0 : 50.0);
+    // Defaults: ROAS 5, CPA 50, REVENUE 10000
+    return goal ? goal.value : (type === 'ROAS' ? 5.0 : (type === 'REVENUE' ? 10000.0 : 50.0));
   };
 
   const getEvaluation = (campaign: AdCampaign) => {
@@ -56,22 +56,49 @@ export const TrackingTable: React.FC<TrackingTableProps> = ({ data, onSelect, se
     if (selectedGoalType === 'ROAS') {
       const roas = spend > 0 ? (campaign.revenue || 0) / spend : 0;
       const target = getGoalValue('ROAS');
-      if (roas > target) return { level: 'Bom', color: 'text-green-500', bg: 'bg-green-500/10', emoji: '🤩' };
-      if (roas === target) return { level: 'Aceitável', color: 'text-yellow-500', bg: 'bg-yellow-500/10', emoji: '😐' };
-      return { level: 'Crítico', color: 'text-red-500', bg: 'bg-red-500/10', emoji: '😟' };
+
+      const roasRounded = Math.round(roas * 100) / 100;
+      const targetRounded = Math.round(target * 100) / 100;
+
+      if (roasRounded > targetRounded) return { level: 'Bom', color: 'text-green-500', bg: 'bg-green-500/10', hoverBg: 'hover:bg-green-500/20', activeBg: 'bg-green-500/20', emoji: '🤩' };
+      if (roasRounded === targetRounded) return { level: 'Aceitável', color: 'text-yellow-500', bg: 'bg-yellow-500/10', hoverBg: 'hover:bg-yellow-500/20', activeBg: 'bg-yellow-500/20', emoji: '😐' };
+      return { level: 'Crítico', color: 'text-red-500', bg: 'bg-red-500/10', hoverBg: 'hover:bg-red-500/20', activeBg: 'bg-red-500/20', emoji: '😟' };
+    } else if (selectedGoalType === 'REVENUE') {
+      const revenue = campaign.revenue || 0;
+      const target = getGoalValue('REVENUE');
+
+      const revenueRounded = Math.round(revenue * 100) / 100;
+      const targetRounded = Math.round(target * 100) / 100;
+
+      if (revenueRounded > targetRounded) return { level: 'Bom', color: 'text-green-500', bg: 'bg-green-500/10', hoverBg: 'hover:bg-green-500/20', activeBg: 'bg-green-500/20', emoji: '🤩' };
+      if (revenueRounded === targetRounded) return { level: 'Aceitável', color: 'text-yellow-500', bg: 'bg-yellow-500/10', hoverBg: 'hover:bg-yellow-500/20', activeBg: 'bg-yellow-500/20', emoji: '😐' };
+      return { level: 'Crítico', color: 'text-red-500', bg: 'bg-red-500/10', hoverBg: 'hover:bg-red-500/20', activeBg: 'bg-red-500/20', emoji: '😟' };
     } else {
-      // CPA (Lead - Stage 3 usually, or index 2)
-      // Let's assume CPA is for Leads (index 2) for now as per prompt example "Lead Qualificado"
-      // Or we can make it generic. The prompt says "Custo - Criado", "Custo - Qualificado".
-      // But the selector is simple. Let's use Leads (index 2) as default for "CPA" selection in this table context.
-      const leads = campaign.data.stage3 || 0; // Assuming stage3 is leads
-      const cpa = leads > 0 ? spend / leads : 0;
-      const target = getGoalValue('CPA', 2); // Stage index 2
+      // CPA Evaluation
+      // Parse index from "CPA_0", "CPA_1", etc.
+      let stageIndex = 2; // Default to index 2 (Stage 3) if parsing fails
+      if (selectedGoalType.startsWith('CPA_')) {
+        const parts = selectedGoalType.split('_');
+        if (parts.length > 1) {
+          stageIndex = parseInt(parts[1], 10);
+        }
+      }
+
+      // Dynamic Stage Access (stage1, stage2, etc.)
+      // stageIndex is 0-based, data keys are 1-based (stage1, stage2...)
+      const stageKey = `stage${stageIndex + 1}` as keyof typeof campaign.data;
+      const conversions = campaign.data[stageKey] || 0;
+
+      const cpa = conversions > 0 ? spend / conversions : 0;
+      const target = getGoalValue('CPA', stageIndex);
+
+      const cpaRounded = Math.round(cpa * 100) / 100;
+      const targetRounded = Math.round(target * 100) / 100;
 
       // Lower CPA is better
-      if (cpa < target && cpa > 0) return { level: 'Bom', color: 'text-green-500', bg: 'bg-green-500/10', emoji: '🤩' };
-      if (cpa === target) return { level: 'Aceitável', color: 'text-yellow-500', bg: 'bg-yellow-500/10', emoji: '😐' };
-      return { level: 'Crítico', color: 'text-red-500', bg: 'bg-red-500/10', emoji: '😟' };
+      if (cpaRounded < targetRounded && cpaRounded > 0) return { level: 'Bom', color: 'text-green-500', bg: 'bg-green-500/10', hoverBg: 'hover:bg-green-500/20', activeBg: 'bg-green-500/20', emoji: '🤩' };
+      if (cpaRounded === targetRounded) return { level: 'Aceitável', color: 'text-yellow-500', bg: 'bg-yellow-500/10', hoverBg: 'hover:bg-yellow-500/20', activeBg: 'bg-yellow-500/20', emoji: '😐' };
+      return { level: 'Crítico', color: 'text-red-500', bg: 'bg-red-500/10', hoverBg: 'hover:bg-red-500/20', activeBg: 'bg-red-500/20', emoji: '😟' };
     }
   };
 
@@ -156,13 +183,13 @@ export const TrackingTable: React.FC<TrackingTableProps> = ({ data, onSelect, se
           <tbody className="divide-y divide-border">
             {data.map((ad) => {
               const isSelected = selectedId === ad.id;
-              const evaluation = getEvaluation(ad);
+              const evaluation = ad.isOrphan ? { level: '', color: '', bg: '', hoverBg: '', activeBg: '', emoji: '-' } : getEvaluation(ad);
 
               return (
                 <tr
                   key={ad.id}
                   onClick={() => onSelect(ad.id)}
-                  className={`cursor-pointer transition-colors duration-200 ${isSelected ? 'bg-brand-50/10' : 'hover:bg-accent/50'}`}
+                  className={`cursor-pointer transition-colors duration-200 border-l-4 ${isSelected ? `${evaluation.activeBg || 'bg-brand-500/20'} border-brand-500 shadow-inner` : `border-transparent ${evaluation.hoverBg || 'hover:bg-accent/50'} ${!isSelected && evaluation.bg}`}`}
                 >
                   <td className="px-4 py-3 md:px-6 md:py-4 font-medium text-card-foreground">
                     <div className="flex items-center gap-3">
@@ -181,9 +208,13 @@ export const TrackingTable: React.FC<TrackingTableProps> = ({ data, onSelect, se
 
                   {/* Evaluation Emoji */}
                   <td className="px-4 py-3 md:px-6 md:py-4 text-center text-lg">
-                    <Tooltip content={`Nível: ${evaluation.level}`} position="top">
-                      <span>{evaluation.emoji}</span>
-                    </Tooltip>
+                    {ad.isOrphan ? (
+                      <span className="text-muted-foreground">-</span>
+                    ) : (
+                      <Tooltip content={`Nível: ${evaluation.level}`} position="top">
+                        <span>{evaluation.emoji}</span>
+                      </Tooltip>
+                    )}
                   </td>
 
                   {(dataSource === 'HYBRID' || dataSource === 'META') && (

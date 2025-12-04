@@ -1,17 +1,21 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, Link, Facebook } from 'lucide-react';
+import { ArrowLeft, Link, Facebook, Menu } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { IntegrationCard } from '@/components/IntegrationCard';
 import { KommoConfigModal } from '@/components/KommoConfigModal';
 import { useToast } from '@/contexts/ToastContext';
+import { Sidebar } from "@/components/Sidebar";
+import { useSession } from "next-auth/react";
 
 export default function IntegrationsPage() {
   const router = useRouter();
+  const { data: session } = useSession();
   const { showToast } = useToast();
   const [isKommoModalOpen, setIsKommoModalOpen] = useState(false);
   const [kommoStatus, setKommoStatus] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   useEffect(() => {
     fetchKommoStatus();
@@ -30,47 +34,64 @@ export default function IntegrationsPage() {
   };
 
   return (
-    <div className="min-h-screen bg-background p-8 font-sans">
-      <div className="max-w-6xl mx-auto">
-        <div className="flex items-center gap-4 mb-8">
-          <button onClick={() => router.push('/')} className="p-2 hover:bg-secondary rounded-full transition-colors text-muted-foreground hover:text-foreground">
-            <ArrowLeft size={24} />
-          </button>
-          <div>
-            <h1 className="text-2xl font-bold text-foreground tracking-tight">Integrações</h1>
-            <p className="text-muted-foreground">Gerencie suas conexões com plataformas externas.</p>
+    <div className="flex h-screen bg-background text-foreground font-sans">
+      <Sidebar
+        isOpen={isMobileMenuOpen}
+        onClose={() => setIsMobileMenuOpen(false)}
+        currentAccount={{ id: session?.user?.clientId || '', name: session?.user?.name || '', image: session?.user?.image }}
+        availableAccounts={[]} // Placeholder
+        onAccountChange={() => { }}
+      />
+
+      <main className="flex-1 flex flex-col h-screen relative overflow-hidden">
+        <header className="h-16 bg-card/80 backdrop-blur-md border-b border-border flex items-center justify-between px-4 md:px-8 shadow-sm z-30">
+          <div className="flex items-center gap-4">
+            <button
+              className="md:hidden p-2 -ml-2 text-slate-500 hover:bg-slate-100 rounded-lg"
+              onClick={() => setIsMobileMenuOpen(true)}
+            >
+              <Menu size={24} />
+            </button>
+            <h1 className="text-xl font-bold text-foreground">Integrações</h1>
+          </div>
+        </header>
+
+        <div className="flex-1 overflow-y-auto p-6 md:p-8 space-y-8 bg-background">
+          <div className="max-w-6xl mx-auto">
+            <div className="mb-8">
+              <h2 className="text-2xl font-bold text-foreground tracking-tight">Gerenciar Conexões</h2>
+              <p className="text-muted-foreground">Conecte suas ferramentas para sincronizar dados automaticamente.</p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {/* Kommo CRM */}
+              <IntegrationCard
+                name="Kommo CRM"
+                description="Sincronize leads e etapas do funil de vendas automaticamente."
+                icon={<Link size={24} className="text-blue-500" />}
+                isActive={kommoStatus}
+                onConfigure={() => setIsKommoModalOpen(true)}
+              />
+
+              {/* Meta Ads */}
+              <IntegrationCard
+                name="Meta Ads"
+                description="Conecte sua conta de anúncios para importar campanhas e custos."
+                icon={<Facebook size={24} className="text-blue-600" />}
+                isActive={true}
+                onConfigure={() => showToast("A integração com Meta é gerenciada via Login.", "success")}
+              />
+            </div>
+
+            {/* Modals */}
+            <KommoConfigModal
+              isOpen={isKommoModalOpen}
+              onClose={() => setIsKommoModalOpen(false)}
+              onSuccess={fetchKommoStatus}
+            />
           </div>
         </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {/* Kommo CRM */}
-          <IntegrationCard
-            name="Kommo CRM"
-            description="Sincronize leads e etapas do funil de vendas automaticamente."
-            icon={<Link size={24} className="text-blue-500" />}
-            isActive={kommoStatus}
-            onConfigure={() => setIsKommoModalOpen(true)}
-          />
-
-          {/* Meta Ads (Placeholder for now, as it's handled via NextAuth/Env) */}
-          <IntegrationCard
-            name="Meta Ads"
-            description="Conecte sua conta de anúncios para importar campanhas e custos."
-            icon={<Facebook size={24} className="text-blue-600" />}
-            isActive={true} // Assuming active if they are logged in, or we could check session
-            onConfigure={() => showToast("A integração com Meta é gerenciada via Login.", "success")}
-          />
-
-          {/* Future Integrations... */}
-        </div>
-
-        {/* Modals */}
-        <KommoConfigModal
-          isOpen={isKommoModalOpen}
-          onClose={() => setIsKommoModalOpen(false)}
-          onSuccess={fetchKommoStatus}
-        />
-      </div>
+      </main>
     </div>
   );
 }

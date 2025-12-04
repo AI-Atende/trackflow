@@ -8,7 +8,7 @@ import { useToast } from "@/contexts/ToastContext";
 import { Sidebar } from "@/components/Sidebar";
 
 interface Goal {
-  type: 'INVESTMENT' | 'ROAS' | 'CPA';
+  type: 'REVENUE' | 'ROAS' | 'CPA';
   stageIndex?: number | null;
   value: number;
 }
@@ -28,7 +28,7 @@ export default function SettingsPage() {
   // Default Goals
   const defaultGoals = {
     ROAS: 5.0,
-    INVESTMENT: 1000.0,
+    REVENUE: 10000.0,
     CPA: 50.0 // Default for all stages if not set
   };
 
@@ -73,23 +73,30 @@ export default function SettingsPage() {
     }
   };
 
-  const getGoalValue = (type: 'INVESTMENT' | 'ROAS' | 'CPA', stageIndex?: number) => {
+  const getGoalValue = (type: 'REVENUE' | 'ROAS' | 'CPA', stageIndex?: number) => {
     const goal = goals.find(g => g.type === type && (stageIndex === undefined || g.stageIndex === stageIndex));
     return goal ? goal.value : (type === 'CPA' ? defaultGoals.CPA : defaultGoals[type]);
   };
 
-  const handleGoalChange = (type: 'INVESTMENT' | 'ROAS' | 'CPA', value: string, stageIndex?: number) => {
+  const handleGoalChange = (type: 'REVENUE' | 'ROAS' | 'CPA', value: string, stageIndex?: number) => {
+    // Allow empty string for better typing experience
+    if (value === '') {
+      // We can't store empty string in number type, so we might need a local state or just handle it as 0 or keep previous.
+      // Better approach: Update state with 0 or handle it in the input.
+      // For now, let's parse.
+    }
+
     const numValue = parseFloat(value);
-    if (isNaN(numValue)) return;
+    // if (isNaN(numValue)) return; // Allow 0 or empty?
 
     setGoals(prev => {
       const existingIndex = prev.findIndex(g => g.type === type && g.stageIndex === stageIndex);
       if (existingIndex >= 0) {
         const newGoals = [...prev];
-        newGoals[existingIndex] = { ...newGoals[existingIndex], value: numValue };
+        newGoals[existingIndex] = { ...newGoals[existingIndex], value: isNaN(numValue) ? 0 : numValue };
         return newGoals;
       } else {
-        return [...prev, { type, value: numValue, stageIndex: stageIndex ?? null }];
+        return [...prev, { type, value: isNaN(numValue) ? 0 : numValue, stageIndex: stageIndex ?? null }];
       }
     });
   };
@@ -170,19 +177,19 @@ export default function SettingsPage() {
 
                 <div className="space-y-2">
                   <label className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-                    <DollarSign size={16} /> Meta de Investimento Mensal
+                    <DollarSign size={16} /> Meta de Receita
                   </label>
                   <div className="relative">
                     <span className="absolute left-4 top-2.5 text-muted-foreground font-bold">R$</span>
                     <input
                       type="number"
                       step="100"
-                      value={getGoalValue('INVESTMENT')}
-                      onChange={(e) => handleGoalChange('INVESTMENT', e.target.value)}
+                      value={getGoalValue('REVENUE')}
+                      onChange={(e) => handleGoalChange('REVENUE', e.target.value)}
                       className="w-full pl-12 pr-4 py-2.5 bg-secondary/30 border border-border rounded-xl focus:ring-2 focus:ring-brand-500/50 outline-none transition-all"
                     />
                   </div>
-                  <p className="text-xs text-muted-foreground">Valor planejado para investimento em anúncios.</p>
+                  <p className="text-xs text-muted-foreground">Valor planejado para receita total.</p>
                 </div>
               </div>
             </section>

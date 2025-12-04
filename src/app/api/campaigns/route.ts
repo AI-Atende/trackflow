@@ -51,7 +51,8 @@ export async function GET(req: NextRequest) {
     }
 
     // Fetch Meta
-    if (source === "META" || source === "HYBRID") {
+    // We fetch Meta for KOMMO too, to enable enrichment (Spend, etc.)
+    if (source === "META" || source === "HYBRID" || source === "KOMMO") {
       if (session.user.metaAdAccount?.adAccountId) {
         try {
           // Meta service expects yyyy-MM-dd
@@ -64,7 +65,7 @@ export async function GET(req: NextRequest) {
 
           const metaData = await fetchMetaHierarchy(session.user.metaAdAccount.adAccountId, metaSince, metaUntil);
 
-          if (source === "HYBRID") {
+          if (source === "HYBRID" || source === "KOMMO") {
             // Merge logic: Try to match by name
             // If match found, merge data. If not, append.
             // Note: Merging hierarchies is complex. For now, we'll append and let the user see both if names differ.
@@ -152,19 +153,17 @@ export async function GET(req: NextRequest) {
               }
             });
 
-            // Filter to keep ONLY matched Kommo campaigns
-            // campaigns = campaigns.filter(c => matchedKommoIds.has(c.id));
+            // NEW LOGIC: Keep ALL Kommo campaigns (merged where possible) AND append orphan Meta campaigns
+            // We already merged Meta data into 'campaigns' (Kommo campaigns) in the loop above.
+            // Now we just need to add the Meta campaigns that were NOT used.
 
-            // NEW LOGIC: Keep matched Kommo campaigns AND append orphan Meta campaigns
-            const matchedKommoCampaigns = campaigns.filter(c => matchedKommoIds.has(c.id));
-
-            const orphanMetaCampaigns = metaData.filter(m => !usedMetaIds.has(m.id));
-
-            // Add orphans to the list
-            // We need to ensure they match the CampaignHierarchy type
-            // MetaData already matches CampaignHierarchy, so we can just append
-            campaigns = [...matchedKommoCampaigns, ...orphanMetaCampaigns];
+            if (source === "HYBRID") {
+              const orphanMetaCampaigns = metaData.filter(m => !usedMetaIds.has(m.id)).map(m => ({ ...m, isOrphan: true }));
+              // Append orphans
+              campaigns = [...campaigns, ...orphanMetaCampaigns];
+            }
           } else {
+            // Source is META
             campaigns = metaData;
           }
         } catch (e) {

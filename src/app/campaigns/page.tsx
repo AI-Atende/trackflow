@@ -52,26 +52,33 @@ const CampaignsContent = () => {
   const [selectedAccount, setSelectedAccount] = useState<any>(null);
 
   const [goals, setGoals] = useState<any[]>([]);
-  const [selectedGoalType, setSelectedGoalType] = useState<'ROAS' | 'CPA'>('ROAS');
+  const [selectedGoalType, setSelectedGoalType] = usePersistentState<'ROAS' | 'CPA' | 'REVENUE'>('dashboard_selectedGoalType', 'ROAS');
 
   // Fetch Goals
   useEffect(() => {
-    if (status === "authenticated") {
-      fetch('/api/goals')
-        .then(res => {
-          if (!res.ok) throw new Error("Falha ao buscar metas");
-          return res.json();
-        })
-        .then(data => {
-          if (Array.isArray(data)) {
-            setGoals(data);
-          } else {
-            console.error("Metas retornaram formato inválido:", data);
-            setGoals([]);
-          }
-        })
-        .catch(err => console.error("Erro ao buscar metas:", err));
-    }
+    const loadGoals = () => {
+      if (status === "authenticated") {
+        fetch('/api/goals')
+          .then(res => {
+            if (!res.ok) throw new Error("Falha ao buscar metas");
+            return res.json();
+          })
+          .then(data => {
+            if (Array.isArray(data)) {
+              setGoals(data);
+            } else {
+              console.error("Metas retornaram formato inválido:", data);
+              setGoals([]);
+            }
+          })
+          .catch(err => console.error("Erro ao buscar metas:", err));
+      }
+    };
+
+    loadGoals();
+
+    window.addEventListener('focus', loadGoals);
+    return () => window.removeEventListener('focus', loadGoals);
   }, [status]);
 
   // Fetch Accounts
@@ -275,7 +282,7 @@ const CampaignsContent = () => {
         <div className="flex-1 overflow-y-auto p-6 md:p-8 space-y-8 bg-background">
 
 
-          // ... existing code ...
+
 
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
             <div>
@@ -289,7 +296,11 @@ const CampaignsContent = () => {
                 <Select
                   options={[
                     { value: 'ROAS', label: 'ROAS' },
-                    { value: 'CPA', label: 'CPA (Lead)' }
+                    { value: 'REVENUE', label: 'Receita' },
+                    ...(integrationConfig?.journeyMap || []).map((stage, index) => ({
+                      value: `CPA_${index}`,
+                      label: `CPA - ${stage}`
+                    }))
                   ]}
                   value={selectedGoalType}
                   onChange={(val) => setSelectedGoalType(val as any)}
@@ -334,17 +345,58 @@ const CampaignsContent = () => {
             </div>
           </div>
 
-          <CampaignHierarchyTable
-            data={filteredCampaigns}
-            loading={isLoading}
-            journeyLabels={dataSource === 'META' ? undefined : integrationConfig?.journeyMap}
-            dataSource={dataSource}
-            goals={goals}
-            selectedGoalType={selectedGoalType}
-          />
-        </div>
-      </main>
-    </div>
+          {
+            dataSource === 'HYBRID' ? (
+              <>
+                <div className="mb-8">
+                  <h2 className="text-lg font-bold text-foreground mb-4 flex items-center gap-2">
+                    <Target size={20} className="text-brand-500" />
+                    Campanhas Integradas
+                  </h2>
+                  <CampaignHierarchyTable
+                    data={filteredCampaigns.filter(c => !c.isOrphan)}
+                    loading={isLoading}
+                    journeyLabels={integrationConfig?.journeyMap}
+                    dataSource={dataSource}
+                    goals={goals}
+                    selectedGoalType={selectedGoalType}
+                  />
+                </div>
+
+                {filteredCampaigns.some(c => c.isOrphan) && (
+                  <div>
+                    <h2 className="text-lg font-bold text-foreground mb-4 flex items-center gap-2">
+                      <Filter size={20} className="text-blue-500" />
+                      Campanhas Adicionais (Apenas Meta)
+                    </h2>
+                    <p className="text-sm text-muted-foreground mb-4">
+                      Estas campanhas foram encontradas no Meta Ads mas não possuem correspondência na integração atual.
+                    </p>
+                    <CampaignHierarchyTable
+                      data={filteredCampaigns.filter(c => c.isOrphan)}
+                      loading={isLoading}
+                      journeyLabels={undefined} // Meta orphans don't have journey stages from Kommo
+                      dataSource="META" // Treat as Meta source for columns
+                      goals={goals}
+                      selectedGoalType={selectedGoalType}
+                    />
+                  </div>
+                )}
+              </>
+            ) : (
+              <CampaignHierarchyTable
+                data={filteredCampaigns}
+                loading={isLoading}
+                journeyLabels={dataSource === 'META' ? undefined : integrationConfig?.journeyMap}
+                dataSource={dataSource}
+                goals={goals}
+                selectedGoalType={selectedGoalType}
+              />
+            )
+          }
+        </div >
+      </main >
+    </div >
   );
 };
 

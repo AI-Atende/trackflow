@@ -102,24 +102,19 @@ export async function GET(req: NextRequest) {
     // 4. Identificar e adicionar "Orfãos" do Meta (Full Outer Join behavior)
     const orphanMetaCampaigns = metaCampaigns.filter((mCamp: any) => !usedMetaIds.has(mCamp.id));
 
-    const formattedOrphans = orphanMetaCampaigns.map((mCamp: any) => ({
-      id: `meta_${mCamp.id}`, // Prefix to avoid collision if needed, though Meta IDs are usually unique strings
-      name: mCamp.name,
-      status: "active", // Or derive from Meta status if available
-      data: {
-        stage1: 0,
-        stage2: 0,
-        stage3: 0,
-        stage4: 0,
-        stage5: 0,
-      },
-      spend: mCamp.spend || 0,
-      metaLeads: mCamp.metaLeads || 0,
-      revenue: 0,
-      roas: 0
-    }));
+    const source = searchParams.get("source") || "HYBRID"; // Default to HYBRID if not specified (backward compatibility)
 
-    const finalCampaigns = [...enrichedCampaigns, ...formattedOrphans];
+    let finalCampaigns = enrichedCampaigns;
+
+    if (source === 'HYBRID') {
+      const formattedOrphans = orphanMetaCampaigns.map((mCamp: any) => ({
+        ...mCamp,
+        status: mCamp.status as "active" | "paused" | "completed",
+        isOrphan: true
+      }));
+
+      finalCampaigns = [...enrichedCampaigns, ...formattedOrphans];
+    }
 
     return NextResponse.json({ campaigns: finalCampaigns });
   } catch (error) {

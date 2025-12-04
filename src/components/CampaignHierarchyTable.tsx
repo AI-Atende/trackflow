@@ -19,10 +19,10 @@ interface Props {
   journeyLabels?: string[]; // Labels for columns (I, II, III...)
   dataSource?: 'KOMMO' | 'META' | 'HYBRID';
   goals?: any[];
-  selectedGoalType?: 'ROAS' | 'CPA';
+  selectedGoalType?: 'ROAS' | 'CPA' | 'REVENUE';
 }
 
-const HierarchyRow = ({ node, level, journeyLabels, dataSource, goals = [], selectedGoalType = 'ROAS' }: { node: CampaignHierarchy, level: number, journeyLabels?: string[], dataSource?: 'KOMMO' | 'META' | 'HYBRID', goals?: any[], selectedGoalType?: 'ROAS' | 'CPA' }) => {
+const HierarchyRow = ({ node, level, journeyLabels, dataSource, goals = [], selectedGoalType = 'ROAS' }: { node: CampaignHierarchy, level: number, journeyLabels?: string[], dataSource?: 'KOMMO' | 'META' | 'HYBRID', goals?: any[], selectedGoalType?: 'ROAS' | 'CPA' | 'REVENUE' }) => {
   const [expanded, setExpanded] = useState(false);
   const { showToast } = useToast();
   const hasChildren = node.children && node.children.length > 0;
@@ -35,11 +35,11 @@ const HierarchyRow = ({ node, level, journeyLabels, dataSource, goals = [], sele
     showToast(`"${text}" copiado!`, "success");
   };
 
-  const getGoalValue = (type: 'ROAS' | 'CPA', stageIndex?: number) => {
+  const getGoalValue = (type: 'ROAS' | 'CPA' | 'REVENUE', stageIndex?: number) => {
     const safeGoals = Array.isArray(goals) ? goals : [];
     const goal = safeGoals.find(g => g.type === type && (stageIndex === undefined || g.stageIndex === stageIndex));
-    // Defaults: ROAS 5, CPA 50
-    return goal ? goal.value : (type === 'ROAS' ? 5.0 : 50.0);
+    // Defaults: ROAS 5, CPA 50, REVENUE 10000
+    return goal ? goal.value : (type === 'ROAS' ? 5.0 : (type === 'REVENUE' ? 10000.0 : 50.0));
   };
 
   const getEvaluation = (campaign: CampaignHierarchy) => {
@@ -48,26 +48,54 @@ const HierarchyRow = ({ node, level, journeyLabels, dataSource, goals = [], sele
     if (selectedGoalType === 'ROAS') {
       const roas = spend > 0 ? (campaign.revenue || 0) / spend : 0;
       const target = getGoalValue('ROAS');
-      if (roas > target) return { level: 'Bom', color: 'text-green-500', bg: 'bg-green-500/10', emoji: '🤩' };
-      if (roas === target) return { level: 'Aceitável', color: 'text-yellow-500', bg: 'bg-yellow-500/10', emoji: '😐' };
-      return { level: 'Crítico', color: 'text-red-500', bg: 'bg-red-500/10', emoji: '😟' };
-    } else {
-      // CPA (Lead - Stage 3 usually, or index 2)
-      const leads = campaign.data.stage3 || 0;
-      const cpa = leads > 0 ? spend / leads : 0;
-      const target = getGoalValue('CPA', 2);
 
-      if (cpa < target && cpa > 0) return { level: 'Bom', color: 'text-green-500', bg: 'bg-green-500/10', emoji: '🤩' };
-      if (cpa === target) return { level: 'Aceitável', color: 'text-yellow-500', bg: 'bg-yellow-500/10', emoji: '😐' };
-      return { level: 'Crítico', color: 'text-red-500', bg: 'bg-red-500/10', emoji: '😟' };
+      const roasRounded = Math.round(roas * 100) / 100;
+      const targetRounded = Math.round(target * 100) / 100;
+
+      if (roasRounded > targetRounded) return { level: 'Bom', color: 'text-green-500', bg: 'bg-green-500/10', hoverBg: 'hover:bg-green-500/20', activeBg: 'bg-green-500/20', emoji: '🤩' };
+      if (roasRounded === targetRounded) return { level: 'Aceitável', color: 'text-yellow-500', bg: 'bg-yellow-500/10', hoverBg: 'hover:bg-yellow-500/20', activeBg: 'bg-yellow-500/20', emoji: '😐' };
+      return { level: 'Crítico', color: 'text-red-500', bg: 'bg-red-500/10', hoverBg: 'hover:bg-red-500/20', activeBg: 'bg-red-500/20', emoji: '😟' };
+    } else if (selectedGoalType === 'REVENUE') {
+      const revenue = campaign.revenue || 0;
+      const target = getGoalValue('REVENUE');
+
+      const revenueRounded = Math.round(revenue * 100) / 100;
+      const targetRounded = Math.round(target * 100) / 100;
+
+      if (revenueRounded > targetRounded) return { level: 'Bom', color: 'text-green-500', bg: 'bg-green-500/10', hoverBg: 'hover:bg-green-500/20', activeBg: 'bg-green-500/20', emoji: '🤩' };
+      if (revenueRounded === targetRounded) return { level: 'Aceitável', color: 'text-yellow-500', bg: 'bg-yellow-500/10', hoverBg: 'hover:bg-yellow-500/20', activeBg: 'bg-yellow-500/20', emoji: '😐' };
+      return { level: 'Crítico', color: 'text-red-500', bg: 'bg-red-500/10', hoverBg: 'hover:bg-red-500/20', activeBg: 'bg-red-500/20', emoji: '😟' };
+    } else {
+      // CPA Evaluation
+      let stageIndex = 2; // Default to index 2 (Stage 3) if parsing fails
+      if (selectedGoalType && selectedGoalType.startsWith('CPA_')) {
+        const parts = selectedGoalType.split('_');
+        if (parts.length > 1) {
+          stageIndex = parseInt(parts[1], 10);
+        }
+      }
+
+      // Dynamic Stage Access (stage1, stage2, etc.)
+      const stageKey = `stage${stageIndex + 1}` as keyof typeof campaign.data;
+      const conversions = campaign.data[stageKey] || 0;
+
+      const cpa = conversions > 0 ? spend / conversions : 0;
+      const target = getGoalValue('CPA', stageIndex);
+
+      const cpaRounded = Math.round(cpa * 100) / 100;
+      const targetRounded = Math.round(target * 100) / 100;
+
+      if (cpaRounded < targetRounded && cpaRounded > 0) return { level: 'Bom', color: 'text-green-500', bg: 'bg-green-500/10', hoverBg: 'hover:bg-green-500/20', activeBg: 'bg-green-500/20', emoji: '🤩' };
+      if (cpaRounded === targetRounded) return { level: 'Aceitável', color: 'text-yellow-500', bg: 'bg-yellow-500/10', hoverBg: 'hover:bg-yellow-500/20', activeBg: 'bg-yellow-500/20', emoji: '😐' };
+      return { level: 'Crítico', color: 'text-red-500', bg: 'bg-red-500/10', hoverBg: 'hover:bg-red-500/20', activeBg: 'bg-red-500/20', emoji: '😟' };
     }
   };
 
-  const evaluation = getEvaluation(node);
+  const evaluation = node.isOrphan ? { level: '', color: '', bg: '', hoverBg: '', activeBg: '', emoji: '-' } : getEvaluation(node);
 
   return (
     <>
-      <tr className={`border-b border-border hover:bg-secondary/20 transition-colors ${level > 0 ? 'bg-secondary/5' : ''}`}>
+      <tr className={`border-b border-border transition-colors ${evaluation.bg ? evaluation.bg : (level > 0 ? 'bg-secondary/5' : '')} ${evaluation.hoverBg ? evaluation.hoverBg : 'hover:bg-secondary/20'}`}>
         <td className="py-3 pr-4" style={{ paddingLeft: `${paddingLeft}px` }}>
           <div className="flex items-center gap-2">
             {hasChildren && (
@@ -104,9 +132,13 @@ const HierarchyRow = ({ node, level, journeyLabels, dataSource, goals = [], sele
 
         {/* Evaluation Emoji */}
         <td className="py-3 px-4 text-center text-lg">
-          <Tooltip content={`Nível: ${evaluation.level}`} position="top">
-            <span>{evaluation.emoji}</span>
-          </Tooltip>
+          {node.isOrphan ? (
+            <span className="text-muted-foreground">-</span>
+          ) : (
+            <Tooltip content={`Nível: ${evaluation.level}`} position="top">
+              <span>{evaluation.emoji}</span>
+            </Tooltip>
+          )}
         </td>
 
         <td className="py-3 px-4 text-center">

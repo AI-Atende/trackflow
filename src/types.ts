@@ -19,6 +19,7 @@ export interface AdCampaign {
   roas?: number;
   revenue?: number;
   metaLeads?: number;
+  isOrphan?: boolean;
 }
 
 export enum JourneyStage {
@@ -54,5 +55,6 @@ export interface CampaignHierarchy {
   roas: number;
   revenue: number;
   metaLeads?: number;
+  isOrphan?: boolean;
   children?: CampaignHierarchy[];
 }

@@ -98,26 +98,33 @@ const HomeContent = () => {
     const [integrationConfig, setIntegrationConfig] = useState<{ isActive: boolean, journeyMap: string[] } | null>(null);
 
     const [goals, setGoals] = useState<any[]>([]);
-    const [selectedGoalType, setSelectedGoalType] = useState<'ROAS' | 'CPA'>('ROAS');
+    const [selectedGoalType, setSelectedGoalType] = usePersistentState<'ROAS' | 'CPA' | 'REVENUE'>('dashboard_selectedGoalType', 'ROAS');
 
     // Fetch Goals
     useEffect(() => {
-        if (status === "authenticated") {
-            fetch('/api/goals')
-                .then(res => {
-                    if (!res.ok) throw new Error("Falha ao buscar metas");
-                    return res.json();
-                })
-                .then(data => {
-                    if (Array.isArray(data)) {
-                        setGoals(data);
-                    } else {
-                        console.error("Metas retornaram formato inválido:", data);
-                        setGoals([]);
-                    }
-                })
-                .catch(err => console.error("Erro ao buscar metas:", err));
-        }
+        const loadGoals = () => {
+            if (status === "authenticated") {
+                fetch('/api/goals')
+                    .then(res => {
+                        if (!res.ok) throw new Error("Falha ao buscar metas");
+                        return res.json();
+                    })
+                    .then(data => {
+                        if (Array.isArray(data)) {
+                            setGoals(data);
+                        } else {
+                            console.error("Metas retornaram formato inválido:", data);
+                            setGoals([]);
+                        }
+                    })
+                    .catch(err => console.error("Erro ao buscar metas:", err));
+            }
+        };
+
+        loadGoals();
+
+        window.addEventListener('focus', loadGoals);
+        return () => window.removeEventListener('focus', loadGoals);
     }, [status]);
 
     // Persist Data Source
@@ -151,7 +158,7 @@ const HomeContent = () => {
             const sinceLocal = format(dateRange.from, 'yyyy-MM-dd');
             const untilLocal = format(dateRange.to, 'yyyy-MM-dd');
 
-            const res = await fetch(`/api/integrations/kommo/data?since=${since}&until=${until}&sinceLocal=${sinceLocal}&untilLocal=${untilLocal}&targetAccountId=${selectedAccount.id}`);
+            const res = await fetch(`/api/integrations/kommo/data?since=${since}&until=${until}&sinceLocal=${sinceLocal}&untilLocal=${untilLocal}&targetAccountId=${selectedAccount.id}&source=${dataSource}`);
             if (res.ok) {
                 const data = await res.json();
                 const campaigns = data.campaigns;
@@ -161,16 +168,23 @@ const HomeContent = () => {
                     setSelectedCampaignId(campaigns[0].id);
                 }
 
+                // Filter for "Integration Only" metrics (Stages & Revenue)
+                const integratedCampaigns = campaigns.filter((c: any) => !c.isOrphan);
+
+                // Investment includes ALL campaigns (Integrated + Orphans)
                 const totalSpend = campaigns.reduce((acc: number, c: any) => acc + (c.spend || 0), 0);
-                const totalRevenue = campaigns.reduce((acc: number, c: any) => acc + (c.revenue || 0), 0);
+
+                // Revenue comes ONLY from Integrated campaigns
+                const totalRevenue = integratedCampaigns.reduce((acc: number, c: any) => acc + (c.revenue || 0), 0);
+
                 const totalROAS = totalSpend > 0 ? totalRevenue / totalSpend : 0;
 
                 const stageTotals = [
-                    campaigns.reduce((acc: number, c: any) => acc + c.data.stage1, 0),
-                    campaigns.reduce((acc: number, c: any) => acc + c.data.stage2, 0),
-                    campaigns.reduce((acc: number, c: any) => acc + c.data.stage3, 0),
-                    campaigns.reduce((acc: number, c: any) => acc + c.data.stage4, 0),
-                    campaigns.reduce((acc: number, c: any) => acc + c.data.stage5, 0),
+                    integratedCampaigns.reduce((acc: number, c: any) => acc + c.data.stage1, 0),
+                    integratedCampaigns.reduce((acc: number, c: any) => acc + c.data.stage2, 0),
+                    integratedCampaigns.reduce((acc: number, c: any) => acc + c.data.stage3, 0),
+                    integratedCampaigns.reduce((acc: number, c: any) => acc + c.data.stage4, 0),
+                    integratedCampaigns.reduce((acc: number, c: any) => acc + c.data.stage5, 0),
                 ];
 
                 const baseMetrics: MetricSummary[] = journeyMap.map((label, index) => {
@@ -587,7 +601,7 @@ const HomeContent = () => {
 
 
 
-                    // ... existing code ...
+
 
                     {/* Main Table */}
                     <section>
@@ -602,7 +616,11 @@ const HomeContent = () => {
                                         <Select
                                             options={[
                                                 { value: 'ROAS', label: 'ROAS' },
-                                                { value: 'CPA', label: 'CPA (Lead)' } // Simplified for now, could be dynamic based on journey
+                                                { value: 'REVENUE', label: 'Receita' },
+                                                ...(integrationConfig?.journeyMap || []).map((stage, index) => ({
+                                                    value: `CPA_${index}`,
+                                                    label: `CPA - ${stage}`
+                                                }))
                                             ]}
                                             value={selectedGoalType}
                                             onChange={(val) => setSelectedGoalType(val as any)}
@@ -630,16 +648,50 @@ const HomeContent = () => {
                                 ))}
                             </div>
                         </div>
-                        <TrackingTable
-                            data={filteredCampaigns}
-                            onSelect={setSelectedCampaignId}
-                            selectedId={selectedCampaignId}
-                            journeyLabels={dataSource === 'META' ? undefined : integrationConfig?.journeyMap}
-                            dataSource={dataSource}
-                            loading={isLoadingData}
-                            goals={goals}
-                            selectedGoalType={selectedGoalType}
-                        />
+                        {dataSource === 'HYBRID' ? (
+                            <>
+                                <div className="mb-8">
+                                    <h3 className="text-md font-semibold text-muted-foreground mb-2">Campanhas Integradas</h3>
+                                    <TrackingTable
+                                        data={filteredCampaigns.filter(c => !c.isOrphan)}
+                                        onSelect={setSelectedCampaignId}
+                                        selectedId={selectedCampaignId}
+                                        journeyLabels={integrationConfig?.journeyMap}
+                                        dataSource={dataSource}
+                                        loading={isLoadingData}
+                                        goals={goals}
+                                        selectedGoalType={selectedGoalType}
+                                    />
+                                </div>
+
+                                {filteredCampaigns.some(c => c.isOrphan) && (
+                                    <div>
+                                        <h3 className="text-md font-semibold text-muted-foreground mb-2">Campanhas Adicionais (Apenas Meta)</h3>
+                                        <TrackingTable
+                                            data={filteredCampaigns.filter(c => c.isOrphan)}
+                                            onSelect={setSelectedCampaignId}
+                                            selectedId={selectedCampaignId}
+                                            journeyLabels={undefined}
+                                            dataSource="META"
+                                            loading={isLoadingData}
+                                            goals={goals}
+                                            selectedGoalType={selectedGoalType}
+                                        />
+                                    </div>
+                                )}
+                            </>
+                        ) : (
+                            <TrackingTable
+                                data={filteredCampaigns}
+                                onSelect={setSelectedCampaignId}
+                                selectedId={selectedCampaignId}
+                                journeyLabels={dataSource === 'META' ? undefined : integrationConfig?.journeyMap}
+                                dataSource={dataSource}
+                                loading={isLoadingData}
+                                goals={goals}
+                                selectedGoalType={selectedGoalType}
+                            />
+                        )}
                     </section >
 
                 </div >
