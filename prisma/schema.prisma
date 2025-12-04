@@ -23,6 +23,7 @@ model Client {
   isActive       Boolean             @default(true)
   
   // Profile Fields
+  fullName       String?
   phone          String?
   birthDate      DateTime?
   address        Json?               // { street, number, neighborhood, city, state, zip }

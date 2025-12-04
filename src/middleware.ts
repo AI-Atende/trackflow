@@ -7,16 +7,21 @@ export default withAuth(
     const isProfileComplete = token?.isProfileComplete;
     const path = req.nextUrl.pathname;
 
+    if (token) {
+      console.log("[MIDDLEWARE] Path:", path);
+      console.log("[MIDDLEWARE] Token Email:", token.email);
+      console.log("[MIDDLEWARE] Token isProfileComplete:", isProfileComplete);
+      console.log("[MIDDLEWARE] Token Keys:", Object.keys(token));
+    }
+
     // If user is logged in but profile is incomplete, redirect to complete profile page
     // Avoid redirect loop if already on the complete profile page
     if (token && !isProfileComplete && path !== "/auth/complete-profile") {
       return NextResponse.redirect(new URL("/auth/complete-profile", req.url));
     }
 
-    // If user is logged in and profile IS complete, but tries to access complete profile page, redirect to home
-    if (token && isProfileComplete && path === "/auth/complete-profile") {
-      return NextResponse.redirect(new URL("/", req.url));
-    }
+    // Removed the redirect to home if profile is complete. 
+    // We will let the client-side page handle that check to avoid conflicts/loops.
   },
   {
     callbacks: {
@@ -36,6 +41,6 @@ export const config = {
      * - _next/image (image optimization files)
      * - favicon.ico (favicon file)
      */
-    "/((?!auth/login|auth/register|api|_next/static|_next/image|favicon.ico).*)",
+    "/((?!auth/login|auth/register|api|legal|_next/static|_next/image|favicon.ico).*)",
   ],
 };

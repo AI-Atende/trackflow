@@ -163,3 +163,36 @@ export async function PUT(req: NextRequest) {
         );
     }
 }
+
+export async function DELETE(req: NextRequest) {
+    const session = await getServerSession(authOptions);
+
+    if (!session?.user || session.user.role !== "ADMIN") {
+        return NextResponse.json({ error: "Não autorizado" }, { status: 403 });
+    }
+
+    try {
+        const { searchParams } = new URL(req.url);
+        const id = searchParams.get("id");
+
+        if (!id) {
+            return NextResponse.json({ error: "ID do usuário obrigatório" }, { status: 400 });
+        }
+
+        if (id === session.user.id) {
+            return NextResponse.json({ error: "Você não pode excluir sua própria conta" }, { status: 400 });
+        }
+
+        await prisma.client.delete({
+            where: { id },
+        });
+
+        return NextResponse.json({ success: true });
+    } catch (error) {
+        console.error("Erro ao excluir usuário:", error);
+        return NextResponse.json(
+            { error: "Erro ao excluir usuário" },
+            { status: 500 }
+        );
+    }
+}

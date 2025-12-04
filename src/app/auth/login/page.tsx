@@ -132,8 +132,8 @@ export default function LoginPage() {
 
                 <p className="text-center text-sm text-muted-foreground mt-8">
                     Não tem uma conta?{' '}
-                    <a href="#" className="font-medium text-brand-500 hover:text-brand-400 transition-colors">
-                        Entre em contato com o admin
+                    <a href="/auth/register" className="font-medium text-brand-500 hover:text-brand-400 transition-colors">
+                        Crie sua conta agora
                     </a>
                 </p>
             </div>

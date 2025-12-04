@@ -110,78 +110,6 @@ const HomeContent = () => {
         dateRangeDeserializer
     );
 
-    useEffect(() => {
-        if (searchParams.get('integration_success') === 'true') {
-            showToast("Integração concluída! Dados capturados com sucesso.", "success");
-            router.replace('/');
-        }
-    }, [searchParams, router, showToast]);
-
-    // Fetch Accounts
-    useEffect(() => {
-        if (status === "authenticated") {
-            fetch('/api/accounts')
-                .then(res => res.json())
-                .then(data => {
-                    if (Array.isArray(data)) {
-                        setAvailableAccounts(data);
-                        // Default to own account if not set or if current selection is invalid
-                        if (!selectedAccount || !data.find(a => a.id === selectedAccount.id)) {
-                            const ownAccount = data.find(a => a.id === session.user.clientId);
-                            setSelectedAccount(ownAccount || data[0]);
-                        }
-                    }
-                })
-                .catch(err => console.error("Erro ao buscar contas:", err));
-        }
-    }, [status, session]);
-
-    useEffect(() => {
-        if (status === "unauthenticated") {
-            router.push("/auth/login");
-        } else if (status === "authenticated" && selectedAccount) {
-            checkIntegrationAndFetch();
-        }
-    }, [status, session, router, dateRange, dataSource, selectedAccount]);
-
-    const checkIntegrationAndFetch = async () => {
-        if (!selectedAccount) return;
-        setIsLoadingData(true);
-
-        // 1. Verificar status da integração Kommo
-        let isKommoActive = false;
-        let journeyMap: string[] = [];
-
-        try {
-            const res = await fetch(`/api/integrations/kommo?targetAccountId=${selectedAccount.id}`);
-            if (res.ok) {
-                const config = await res.json();
-                if (config.isActive) {
-                    isKommoActive = true;
-                    journeyMap = config.journeyMap;
-                    setIntegrationConfig({ isActive: true, journeyMap: config.journeyMap });
-                } else {
-                    setIntegrationConfig(null);
-                }
-            }
-        } catch (e) {
-            console.error("Erro ao verificar integração:", e);
-            setIntegrationConfig(null);
-        }
-
-        // 2. Decidir qual dado buscar
-        if (dataSource === 'META') {
-            fetchMetaDashboardData();
-        } else if (isKommoActive) {
-            fetchKommoDashboardData(journeyMap);
-        } else {
-            // Se Kommo inativo e selecionado Kommo/Hybrid -> Fallback para Meta
-            setDataSource('META');
-            setSelectedCampaignId(null);
-            return; // O useEffect vai rodar novamente com dataSource='META'
-        }
-    };
-
     const toRoman = (num: number): string => {
         const map: { [key: number]: string } = {
             1: 'I', 2: 'II', 3: 'III', 4: 'IV', 5: 'V',
@@ -200,9 +128,6 @@ const HomeContent = () => {
             const sinceLocal = format(dateRange.from, 'yyyy-MM-dd');
             const untilLocal = format(dateRange.to, 'yyyy-MM-dd');
 
-            // Note: Kommo data API might also need targetAccountId if it fetches data directly. 
-            // Assuming /api/integrations/kommo/data uses session, we need to update it too.
-            // For now, let's pass it as query param.
             const res = await fetch(`/api/integrations/kommo/data?since=${since}&until=${until}&sinceLocal=${sinceLocal}&untilLocal=${untilLocal}&targetAccountId=${selectedAccount.id}`);
             if (res.ok) {
                 const data = await res.json();
@@ -234,7 +159,7 @@ const HomeContent = () => {
                         label: label || `Etapa ${index + 1}`,
                         value: value.toLocaleString('pt-BR'),
                         percentage: `${percentage.toFixed(2)}%`,
-                        trend: "neutral", // Removed trend logic as it's now conversion rate
+                        trend: "neutral",
                         icon: ["Users", "Filter", "CheckCircle", "Target", "Award"][index] || "Activity"
                     };
                 });
@@ -248,7 +173,6 @@ const HomeContent = () => {
                 });
 
                 if (dataSource === 'HYBRID') {
-                    // Adicionar Investimento e ROAS após as métricas de jornada
                     baseMetrics.push({
                         label: "Investimento Total",
                         value: `R$ ${totalSpend.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`,
@@ -318,7 +242,7 @@ const HomeContent = () => {
                     {
                         label: "Impressões",
                         value: totalImpressions.toLocaleString('pt-BR'),
-                        percentage: "100%", // Always 100% of itself
+                        percentage: "100%",
                         trend: "neutral",
                         icon: "Eye"
                     },
@@ -354,6 +278,85 @@ const HomeContent = () => {
         }
     };
 
+    const checkIntegrationAndFetch = async () => {
+        if (!selectedAccount) return;
+        setIsLoadingData(true);
+
+        // 1. Verificar status da integração Kommo
+        let isKommoActive = false;
+        let journeyMap: string[] = [];
+
+        try {
+            const res = await fetch(`/api/integrations/kommo?targetAccountId=${selectedAccount.id}`);
+            if (res.ok) {
+                const config = await res.json();
+                if (config.isActive) {
+                    isKommoActive = true;
+                    journeyMap = config.journeyMap;
+                    setIntegrationConfig({ isActive: true, journeyMap: config.journeyMap });
+                } else {
+                    setIntegrationConfig(null);
+                }
+            }
+        } catch (e) {
+            console.error("Erro ao verificar integração:", e);
+            setIntegrationConfig(null);
+        }
+
+        // 2. Decidir qual dado buscar
+        if (dataSource === 'META') {
+            fetchMetaDashboardData();
+        } else if (isKommoActive) {
+            fetchKommoDashboardData(journeyMap);
+        } else {
+            // Se Kommo inativo e selecionado Kommo/Hybrid -> Fallback para Meta
+            setDataSource('META');
+            setSelectedCampaignId(null);
+            return; // O useEffect vai rodar novamente com dataSource='META'
+        }
+    };
+
+    useEffect(() => {
+        if (searchParams.get('integration_success') === 'true') {
+            showToast("Integração concluída! Dados capturados com sucesso.", "success");
+            router.replace('/');
+        }
+    }, [searchParams, router, showToast]);
+
+    // Fetch Accounts
+    useEffect(() => {
+        if (status === "unauthenticated") {
+            router.push("/auth/login");
+        } else if (status === "authenticated") {
+            // Client-side enforcement of profile completion
+            if (session?.user && !session.user.isProfileComplete) {
+                console.log("[DASHBOARD] Profile incomplete, forcing redirect...");
+                window.location.href = "/auth/complete-profile";
+                return;
+            }
+
+            fetch('/api/accounts')
+                .then(res => res.json())
+                .then(data => {
+                    if (Array.isArray(data)) {
+                        setAvailableAccounts(data);
+                        // Default to own account if not set or if current selection is invalid
+                        if (!selectedAccount || !data.find(a => a.id === selectedAccount.id)) {
+                            const ownAccount = data.find(a => a.id === session.user.clientId);
+                            setSelectedAccount(ownAccount || data[0]);
+                        }
+                    }
+                })
+                .catch(err => console.error("Erro ao buscar contas:", err));
+        }
+    }, [status, session, router]);
+
+    useEffect(() => {
+        if (status === "authenticated" && selectedAccount) {
+            checkIntegrationAndFetch();
+        }
+    }, [status, session, selectedAccount, dateRange, dataSource]);
+
     const filteredCampaigns = campaigns.filter(c =>
         c.name.toLowerCase().includes(searchTerm.toLowerCase())
     );
@@ -364,6 +367,11 @@ const HomeContent = () => {
 
     if (!session) {
         return null;
+    }
+
+    // Guard: Do not render dashboard if profile is incomplete
+    if (session.user && !session.user.isProfileComplete) {
+        return <div className="flex items-center justify-center min-h-screen">Redirecionando para completar perfil...</div>;
     }
 
     return (

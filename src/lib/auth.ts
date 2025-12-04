@@ -40,6 +40,16 @@ export const authOptions: NextAuthOptions = {
 
                 const primaryAdAccount = client.metaAdAccounts?.[0];
 
+                const isProfileComplete = !!(
+                    client.phone &&
+                    client.birthDate &&
+                    client.address &&
+                    client.termsAccepted &&
+                    client.lgpdConsent
+                );
+
+                console.log("[AUTH] Authorize - User:", client.email, "isProfileComplete:", isProfileComplete);
+
                 return {
                     id: client.id,
                     clientId: client.id,
@@ -48,6 +58,13 @@ export const authOptions: NextAuthOptions = {
                     role: client.role,
                     isActive: client.isActive,
                     image: client.image,
+                    // Pass raw fields to token for initial hydration
+                    phone: client.phone,
+                    birthDate: client.birthDate,
+                    address: client.address,
+                    termsAccepted: client.termsAccepted,
+                    lgpdConsent: client.lgpdConsent,
+                    isProfileComplete, // Pass to token
                     metaAdAccount: primaryAdAccount ? {
                         id: primaryAdAccount.id,
                         adAccountId: primaryAdAccount.adAccountId,
@@ -65,11 +82,20 @@ export const authOptions: NextAuthOptions = {
     callbacks: {
         async jwt({ token, user, trigger, session }) {
             if (user) {
+                console.log("[AUTH] JWT - Initial User:", user.email, "isProfileComplete:", user.isProfileComplete);
                 token.clientId = user.clientId;
                 token.role = user.role;
                 token.isActive = user.isActive;
                 token.image = user.image;
                 token.metaAdAccount = user.metaAdAccount;
+
+                // Hydrate profile fields from user object (authorize return)
+                token.phone = user.phone;
+                token.birthDate = user.birthDate;
+                token.address = user.address;
+                token.termsAccepted = user.termsAccepted;
+                token.lgpdConsent = user.lgpdConsent;
+                token.isProfileComplete = user.isProfileComplete;
             }
 
             // Se o token já existe (usuário logado), buscar dados atualizados do banco
@@ -102,13 +128,17 @@ export const authOptions: NextAuthOptions = {
                     token.lgpdConsent = dbUser.lgpdConsent;
 
                     // Calculate Profile Completeness
-                    token.isProfileComplete = !!(
-                        dbUser.phone &&
-                        dbUser.birthDate &&
-                        dbUser.address &&
-                        dbUser.termsAccepted &&
-                        dbUser.lgpdConsent
-                    );
+                    // Calculate Profile Completeness
+                    const hasPhone = !!dbUser.phone;
+                    const hasBirthDate = !!dbUser.birthDate;
+                    const hasAddress = !!dbUser.address; // Check if not null
+                    const hasTerms = dbUser.termsAccepted === true;
+                    const hasConsent = dbUser.lgpdConsent === true;
+
+                    console.log("[AUTH] JWT Check - Phone:", hasPhone, "Birth:", hasBirthDate, "Addr:", hasAddress, "Terms:", hasTerms, "Consent:", hasConsent);
+
+                    token.isProfileComplete = hasPhone && hasBirthDate && hasAddress && hasTerms && hasConsent;
+                    console.log("[AUTH] JWT - DB Fetch - User:", dbUser.email, "isProfileComplete:", token.isProfileComplete);
                 }
             }
 

@@ -3,9 +3,11 @@
 import { useState, useEffect } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { User, Camera, Save, ArrowLeft, Mail, UserCircle, MapPin, Calendar, Phone } from "lucide-react";
+import { User, Camera, Save, ArrowLeft, Mail, UserCircle, MapPin, Phone } from "lucide-react";
 import { useToast } from "@/contexts/ToastContext";
 import { Select } from "@/components/ui/Select";
+import { DatePicker } from "@/components/ui/DatePicker";
+import { maskPhone, maskCEP } from "@/lib/masks";
 
 const BRAZIL_STATES = [
     { value: "AC", label: "Acre" }, { value: "AL", label: "Alagoas" }, { value: "AP", label: "Amapá" },
@@ -27,6 +29,7 @@ export default function ProfilePage() {
     const [isSaving, setIsSaving] = useState(false);
     const [formData, setFormData] = useState({
         name: "",
+        fullName: "",
         email: "",
         image: "",
         phone: "",
@@ -54,6 +57,7 @@ export default function ProfilePage() {
                 const data = await res.json();
                 setFormData({
                     name: data.name || "",
+                    fullName: data.fullName || "",
                     email: data.email || "",
                     image: data.image || "",
                     phone: data.phone || "",
@@ -84,6 +88,7 @@ export default function ProfilePage() {
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     name: formData.name,
+                    fullName: formData.fullName,
                     image: formData.image,
                     phone: formData.phone,
                     birthDate: formData.birthDate,
@@ -133,7 +138,7 @@ export default function ProfilePage() {
                     Voltar
                 </button>
 
-                <div className="bg-card/50 backdrop-blur-md border border-border rounded-xl shadow-xl overflow-hidden glass neon-border">
+                <div className="bg-card/50 backdrop-blur-md border border-border rounded-xl shadow-xl glass neon-border">
                     <div className="p-8 border-b border-border bg-secondary/30">
                         <div className="flex items-center gap-4">
                             <div className="p-3 bg-brand-500/20 rounded-xl">
@@ -183,13 +188,27 @@ export default function ProfilePage() {
 
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-border">
                             <div className="space-y-2">
-                                <label className="block text-sm font-medium text-foreground">Nome Completo</label>
+                                <label className="block text-sm font-medium text-foreground">Nome da Conta (Público)</label>
                                 <div className="relative">
                                     <User size={18} className="absolute left-3 top-3 text-muted-foreground" />
                                     <input
                                         type="text"
                                         value={formData.name}
                                         onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                                        className="w-full pl-10 pr-4 py-2.5 bg-secondary/30 border border-border rounded-xl focus:ring-2 focus:ring-brand-500/50 outline-none transition-all"
+                                        required
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="space-y-2">
+                                <label className="block text-sm font-medium text-foreground">Nome Completo (Privado)</label>
+                                <div className="relative">
+                                    <User size={18} className="absolute left-3 top-3 text-muted-foreground" />
+                                    <input
+                                        type="text"
+                                        value={formData.fullName}
+                                        onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
                                         className="w-full pl-10 pr-4 py-2.5 bg-secondary/30 border border-border rounded-xl focus:ring-2 focus:ring-brand-500/50 outline-none transition-all"
                                         required
                                     />
@@ -216,7 +235,7 @@ export default function ProfilePage() {
                                     <input
                                         type="tel"
                                         value={formData.phone}
-                                        onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                                        onChange={(e) => setFormData({ ...formData, phone: maskPhone(e.target.value) })}
                                         className="w-full pl-10 pr-4 py-2.5 bg-secondary/30 border border-border rounded-xl focus:ring-2 focus:ring-brand-500/50 outline-none transition-all"
                                     />
                                 </div>
@@ -224,15 +243,12 @@ export default function ProfilePage() {
 
                             <div className="space-y-2">
                                 <label className="block text-sm font-medium text-foreground">Data de Nascimento</label>
-                                <div className="relative">
-                                    <Calendar size={18} className="absolute left-3 top-3 text-muted-foreground" />
-                                    <input
-                                        type="date"
-                                        value={formData.birthDate}
-                                        onChange={(e) => setFormData({ ...formData, birthDate: e.target.value })}
-                                        className="w-full pl-10 pr-4 py-2.5 bg-secondary/30 border border-border rounded-xl focus:ring-2 focus:ring-brand-500/50 outline-none transition-all"
-                                    />
-                                </div>
+                                <DatePicker
+                                    value={formData.birthDate}
+                                    onChange={(val) => setFormData({ ...formData, birthDate: val })}
+                                    placeholder="DD/MM/AAAA"
+                                    className="w-full"
+                                />
                             </div>
                         </div>
 
@@ -247,7 +263,8 @@ export default function ProfilePage() {
                                     <input
                                         type="text"
                                         value={formData.zip}
-                                        onChange={(e) => setFormData({ ...formData, zip: e.target.value })}
+                                        onChange={(e) => setFormData({ ...formData, zip: maskCEP(e.target.value) })}
+                                        placeholder="00000-000"
                                         className="w-full px-4 py-2.5 bg-secondary/30 border border-border rounded-xl focus:ring-2 focus:ring-brand-500/50 outline-none transition-all"
                                     />
                                 </div>

@@ -15,6 +15,7 @@ export async function GET(req: NextRequest) {
         select: {
             id: true,
             name: true,
+            fullName: true,
             email: true,
             image: true,
             role: true,
@@ -41,13 +42,14 @@ export async function PUT(req: NextRequest) {
     }
 
     const body = await req.json();
-    const { name, image, phone, birthDate, address, termsAccepted, lgpdConsent } = body;
+    const { name, fullName, image, phone, birthDate, address, termsAccepted, lgpdConsent } = body;
 
     try {
         const updatedUser = await prisma.client.update({
             where: { id: session.user.clientId },
             data: {
                 name,
+                fullName,
                 image,
                 phone,
                 birthDate: birthDate ? new Date(birthDate) : undefined,
@@ -60,6 +62,7 @@ export async function PUT(req: NextRequest) {
         return NextResponse.json({
             id: updatedUser.id,
             name: updatedUser.name,
+            fullName: updatedUser.fullName,
             email: updatedUser.email,
             image: updatedUser.image,
             phone: updatedUser.phone,

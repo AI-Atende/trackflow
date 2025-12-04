@@ -31,6 +31,8 @@ export default function AdminUsersPage() {
     const [isLoading, setIsLoading] = useState(true);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingUser, setEditingUser] = useState<User | null>(null);
+    const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+    const [userToDelete, setUserToDelete] = useState<User | null>(null);
 
     // Form states
     const [formData, setFormData] = useState({
@@ -89,11 +91,40 @@ export default function AdminUsersPage() {
                 closeModal();
                 showToast(editingUser ? "Usuário atualizado com sucesso" : "Usuário criado com sucesso", "success");
             } else {
-                showToast("Erro ao salvar usuário", "error");
+                const data = await res.json();
+                showToast(data.error || "Erro ao salvar usuário", "error");
             }
         } catch (error) {
             console.error("Erro ao salvar", error);
             showToast("Erro ao salvar usuário", "error");
+        }
+    };
+
+    const confirmDelete = (user: User) => {
+        setUserToDelete(user);
+        setIsDeleteModalOpen(true);
+    };
+
+    const handleDeleteUser = async () => {
+        if (!userToDelete) return;
+
+        try {
+            const res = await fetch(`/api/admin/users?id=${userToDelete.id}`, {
+                method: "DELETE",
+            });
+
+            if (res.ok) {
+                fetchUsers();
+                setIsDeleteModalOpen(false);
+                setUserToDelete(null);
+                showToast("Usuário excluído com sucesso", "success");
+            } else {
+                const data = await res.json();
+                showToast(data.error || "Erro ao excluir usuário", "error");
+            }
+        } catch (error) {
+            console.error("Erro ao excluir", error);
+            showToast("Erro ao excluir usuário", "error");
         }
     };
 
@@ -212,9 +243,17 @@ export default function AdminUsersPage() {
                                     <td className="p-5 text-right">
                                         <button
                                             onClick={() => openModal(user)}
-                                            className="p-2 text-muted-foreground hover:text-brand-500 hover:bg-brand-500/10 rounded-lg transition-all opacity-0 group-hover:opacity-100"
+                                            className="p-2 text-muted-foreground hover:text-brand-500 hover:bg-brand-500/10 rounded-lg transition-all opacity-0 group-hover:opacity-100 mr-2"
+                                            title="Editar"
                                         >
                                             <Edit size={18} />
+                                        </button>
+                                        <button
+                                            onClick={() => confirmDelete(user)}
+                                            className="p-2 text-muted-foreground hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-all opacity-0 group-hover:opacity-100"
+                                            title="Excluir"
+                                        >
+                                            <Trash2 size={18} />
                                         </button>
                                     </td>
                                 </tr>
@@ -363,6 +402,43 @@ export default function AdminUsersPage() {
                                 </button>
                             </div>
                         </form>
+                    </div>
+                </div>
+            )}
+
+            {/* Delete Confirmation Modal */}
+            {isDeleteModalOpen && (
+                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 animate-in fade-in duration-200">
+                    <div className="bg-card border border-border rounded-2xl p-8 w-full max-w-md shadow-2xl glass neon-border animate-in zoom-in-95 duration-200">
+                        <div className="flex items-center gap-4 mb-6">
+                            <div className="p-3 bg-red-500/20 rounded-full">
+                                <ShieldAlert size={24} className="text-red-500" />
+                            </div>
+                            <div>
+                                <h2 className="text-xl font-bold text-foreground">Excluir Usuário</h2>
+                                <p className="text-sm text-muted-foreground">Esta ação é irreversível.</p>
+                            </div>
+                        </div>
+
+                        <p className="text-foreground mb-8">
+                            Tem certeza que deseja excluir o usuário <span className="font-bold">{userToDelete?.name}</span>?
+                            Todos os dados associados serão perdidos.
+                        </p>
+
+                        <div className="flex justify-end gap-3">
+                            <button
+                                onClick={() => setIsDeleteModalOpen(false)}
+                                className="px-4 py-2.5 text-muted-foreground hover:bg-secondary rounded-xl transition-colors font-medium"
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                onClick={handleDeleteUser}
+                                className="px-6 py-2.5 bg-red-600 text-white rounded-xl hover:bg-red-700 shadow-lg shadow-red-500/20 hover:shadow-red-500/40 transition-all font-medium"
+                            >
+                                Sim, Excluir
+                            </button>
+                        </div>
                     </div>
                 </div>
             )}
