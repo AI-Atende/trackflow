@@ -342,6 +342,18 @@ const HomeContent = () => {
 
         // 2. Decidir qual dado buscar
         if (dataSource === 'META') {
+            // Fetch Meta Config for Labels
+            try {
+                const res = await fetch(`/api/integrations/meta/config`);
+                if (res.ok) {
+                    const config = await res.json();
+                    if (config.journeyMap) {
+                        setIntegrationConfig({ isActive: true, journeyMap: config.journeyMap });
+                    }
+                }
+            } catch (e) {
+                console.error("Erro ao buscar config Meta:", e);
+            }
             fetchMetaDashboardData();
         } else if (isKommoActive) {
             fetchKommoDashboardData(journeyMap);
@@ -590,7 +602,7 @@ const HomeContent = () => {
                             <FunnelChart
                                 data={filteredCampaigns}
                                 selectedId={selectedCampaignId}
-                                journeyLabels={dataSource === 'META' ? undefined : integrationConfig?.journeyMap}
+                                journeyLabels={integrationConfig?.journeyMap}
                                 loading={isLoadingData}
                             />
                         </div>
@@ -632,7 +644,7 @@ const HomeContent = () => {
 
                             <div className="flex gap-2 flex-wrap justify-end">
                                 {/* Legenda dinâmica */}
-                                {(dataSource === 'META' ? ["Impressões", "Cliques", "Leads", "-", "-"] : (integrationConfig?.journeyMap || ["Impressões / Alcance", "Cliques / Interesse", "Leads / Cadastro", "Checkout Iniciado", "Compra Realizada"])).map((label, idx) => (
+                                {(dataSource === 'META' ? (integrationConfig?.journeyMap || ["Impressões", "Cliques", "Leads", "-", "-"]) : (integrationConfig?.journeyMap || ["Impressões / Alcance", "Cliques / Interesse", "Leads / Cadastro", "Checkout Iniciado", "Compra Realizada"])).map((label, idx) => (
                                     <div
                                         key={idx}
                                         className={`hidden md:flex items-center px-3 py-1 rounded-lg border ${idx === 0 ? "bg-blue-500/10 text-blue-500 border-blue-500/20" :
@@ -671,7 +683,7 @@ const HomeContent = () => {
                                             data={filteredCampaigns.filter(c => c.isOrphan)}
                                             onSelect={setSelectedCampaignId}
                                             selectedId={selectedCampaignId}
-                                            journeyLabels={undefined}
+                                            journeyLabels={undefined} // Meta orphans in hybrid mode don't have configured labels passed yet, or we could fetch them. For now leaving undefined to use defaults or we need to fetch Meta config separately for Hybrid.
                                             dataSource="META"
                                             loading={isLoadingData}
                                             goals={goals}
@@ -685,7 +697,7 @@ const HomeContent = () => {
                                 data={filteredCampaigns}
                                 onSelect={setSelectedCampaignId}
                                 selectedId={selectedCampaignId}
-                                journeyLabels={dataSource === 'META' ? undefined : integrationConfig?.journeyMap}
+                                journeyLabels={integrationConfig?.journeyMap}
                                 dataSource={dataSource}
                                 loading={isLoadingData}
                                 goals={goals}

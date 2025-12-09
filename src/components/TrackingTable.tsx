@@ -168,8 +168,15 @@ export const TrackingTable: React.FC<TrackingTableProps> = ({ data, onSelect, se
               {dataSource === 'HYBRID' && (
                 <>
                   <th scope="col" className="px-4 py-3 md:px-6 md:py-4 text-center">ROAS</th>
-                  <th scope="col" className="px-4 py-3 md:px-6 md:py-4 text-center text-blue-500">Meta Leads</th>
+                  <th scope="col" className="px-4 py-3 md:px-6 md:py-4 text-center text-blue-500">
+                    Meta Leads
+                  </th>
                 </>
+              )}
+              {dataSource === 'META' && (
+                <th scope="col" className="px-4 py-3 md:px-6 md:py-4 text-center text-blue-500">
+                  {labels.length > 0 ? labels[labels.length - 1] : 'Resultado'}
+                </th>
               )}
               {(dataSource === 'KOMMO' || dataSource === 'HYBRID') && (
                 <th scope="col" className="px-4 py-3 md:px-6 md:py-4 text-center text-gray-600 font-bold bg-gray-500/10">Leads Fantasmas</th>
@@ -243,6 +250,12 @@ export const TrackingTable: React.FC<TrackingTableProps> = ({ data, onSelect, se
                         {formatNumber(ad.metaLeads || 0)}
                       </td>
                     </>
+                  )}
+
+                  {dataSource === 'META' && (
+                    <td className="px-4 py-3 md:px-6 md:py-4 text-center text-blue-500 font-bold">
+                      {formatNumber(ad.metaLeads || 0)}
+                    </td>
                   )}
 
                   {(dataSource === 'KOMMO' || dataSource === 'HYBRID') && (

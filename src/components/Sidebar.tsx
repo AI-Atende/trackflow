@@ -47,10 +47,7 @@ export const Sidebar = ({ isOpen, onClose, currentAccount, availableAccounts, on
   const navItems = [
     { href: "/", label: "Dashboard Geral", icon: BarChart3 },
     { href: "/campaigns", label: "Campanhas", icon: Target },
-    { href: "/audiences", label: "Públicos", icon: Users }, // Placeholder path
     { href: "/settings", label: "Configurações", icon: Settings },
-    { href: "/integrations", label: "Integrações", icon: Share2 },
-    { href: "/sharing", label: "Compartilhamento", icon: UserPlus },
   ];
 
   const isActive = (path: string) => pathname === path;

@@ -5,6 +5,7 @@ import { ArrowLeft, Link, Facebook, Menu } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { IntegrationCard } from '@/components/IntegrationCard';
 import { KommoConfigModal } from '@/components/KommoConfigModal';
+import { MetaConfigModal } from '@/components/MetaConfigModal';
 import { useToast } from '@/contexts/ToastContext';
 import { Sidebar } from "@/components/Sidebar";
 import { useSession } from "next-auth/react";
@@ -15,6 +16,7 @@ export default function IntegrationsPage() {
   const { showToast } = useToast();
   const [isKommoModalOpen, setIsKommoModalOpen] = useState(false);
   const [kommoStatus, setKommoStatus] = useState(false);
+  const [isMetaModalOpen, setIsMetaModalOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   useEffect(() => {
@@ -52,6 +54,9 @@ export default function IntegrationsPage() {
             >
               <Menu size={24} />
             </button>
+            <button onClick={() => router.back()} className="hidden md:block p-2 -ml-2 hover:bg-secondary rounded-lg transition-colors">
+              <ArrowLeft size={20} className="text-muted-foreground" />
+            </button>
             <h1 className="text-xl font-bold text-foreground">Integrações</h1>
           </div>
         </header>
@@ -79,7 +84,7 @@ export default function IntegrationsPage() {
                 description="Conecte sua conta de anúncios para importar campanhas e custos."
                 icon={<Facebook size={24} className="text-blue-600" />}
                 isActive={true}
-                onConfigure={() => showToast("A integração com Meta é gerenciada via Login.", "success")}
+                onConfigure={() => setIsMetaModalOpen(true)}
               />
             </div>
 
@@ -88,6 +93,11 @@ export default function IntegrationsPage() {
               isOpen={isKommoModalOpen}
               onClose={() => setIsKommoModalOpen(false)}
               onSuccess={fetchKommoStatus}
+            />
+            <MetaConfigModal
+              isOpen={isMetaModalOpen}
+              onClose={() => setIsMetaModalOpen(false)}
+              onSuccess={() => { }}
             />
           </div>
         </div>

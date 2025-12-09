@@ -3,11 +3,16 @@ import { prisma } from "@/lib/prisma";
 export async function fetchMetaCampaigns(adAccountId: string, since: string, until: string) {
   const metaAccount = await prisma.metaAdAccount.findFirst({
     where: { adAccountId },
+    include: { client: { include: { integrations: true } } }
   });
 
   if (!metaAccount) {
     return [];
   }
+
+  // Get Meta Config
+  const metaConfig = metaAccount.client.integrations.find(i => i.provider === 'META');
+  const journeyMap = (metaConfig?.journeyMap as string[]) || ['impressions', 'clicks', 'leads'];
 
   const sinceDate = new Date(`${since}T00:00:00.000Z`);
   const untilDate = new Date(`${until}T23:59:59.999Z`);
@@ -53,22 +58,44 @@ export async function fetchMetaCampaigns(adAccountId: string, since: string, unt
     }
   }
 
-  return Array.from(map.values()).map(c => ({
-    id: c.campaignId,
-    name: c.campaignName,
-    status: 'active', // Default status, could be fetched if needed
-    data: {
-      stage1: c.totalImpressions,
-      stage2: c.totalClicks,
-      stage3: c.totalLeads,
-      stage4: 0,
-      stage5: 0
-    },
-    spend: c.totalSpend,
-    roas: 0,
-    revenue: 0,
-    metaLeads: c.totalLeads
-  }));
+  const calculateMetric = (metric: string, data: CampaignSummary) => {
+    switch (metric) {
+      case 'impressions': return data.totalImpressions;
+      case 'clicks': return data.totalClicks;
+      case 'leads': return data.totalLeads;
+      case 'spend': return data.totalSpend;
+      case 'ctr': return data.totalImpressions > 0 ? (data.totalClicks / data.totalImpressions) * 100 : 0;
+      case 'cpc': return data.totalClicks > 0 ? data.totalSpend / data.totalClicks : 0;
+      case 'cpm': return data.totalImpressions > 0 ? (data.totalSpend / data.totalImpressions) * 1000 : 0;
+      case 'cpa': return data.totalLeads > 0 ? data.totalSpend / data.totalLeads : 0;
+      default: return 0;
+    }
+  };
+
+  return Array.from(map.values()).map(c => {
+    const stageValues = journeyMap.map(metric => calculateMetric(metric, c));
+
+    // Last configured stage is the "Result" (metaLeads)
+    const resultMetric = journeyMap[journeyMap.length - 1];
+    const resultValue = calculateMetric(resultMetric, c);
+
+    return {
+      id: c.campaignId,
+      name: c.campaignName,
+      status: 'active',
+      data: {
+        stage1: stageValues[0] || 0,
+        stage2: stageValues[1] || 0,
+        stage3: stageValues[2] || 0,
+        stage4: stageValues[3] || 0,
+        stage5: stageValues[4] || 0
+      },
+      spend: c.totalSpend,
+      roas: 0,
+      revenue: 0,
+      metaLeads: resultValue
+    };
+  });
 }
 
 import { CampaignHierarchy } from "@/types";
@@ -76,11 +103,16 @@ import { CampaignHierarchy } from "@/types";
 export async function fetchMetaHierarchy(adAccountId: string, since: string, until: string): Promise<CampaignHierarchy[]> {
   const metaAccount = await prisma.metaAdAccount.findFirst({
     where: { adAccountId },
+    include: { client: { include: { integrations: true } } }
   });
 
   if (!metaAccount) {
     return [];
   }
+
+  // Get Meta Config
+  const metaConfig = metaAccount.client.integrations.find(i => i.provider === 'META');
+  const journeyMap = (metaConfig?.journeyMap as string[]) || ['impressions', 'clicks', 'leads'];
 
   const sinceDate = new Date(`${since}T00:00:00.000Z`);
   const untilDate = new Date(`${until}T23:59:59.999Z`);
@@ -95,95 +127,48 @@ export async function fetchMetaHierarchy(adAccountId: string, since: string, unt
     },
   });
 
-  // Map<CampaignId, CampaignNode>
-  const campaignsMap = new Map<string, CampaignHierarchy>();
-  // Map<AdSetId, AdSetNode>
-  const adSetsMap = new Map<string, CampaignHierarchy>();
-  // Map<AdId, AdNode>
-  const adsMap = new Map<string, CampaignHierarchy>();
+  // Helper to aggregate raw data
+  type AggregatedData = {
+    spend: number;
+    impressions: number;
+    clicks: number;
+    leads: number;
+  };
 
-  // Primeiro passo: Agregar dados por nível
-  for (const row of rows) {
-    // 1. Campaign Level
-    if (!campaignsMap.has(row.campaignId)) {
-      campaignsMap.set(row.campaignId, {
-        id: row.campaignId,
-        name: row.campaignName,
-        type: 'campaign',
-        status: 'active',
-        data: { stage1: 0, stage2: 0, stage3: 0, stage4: 0, stage5: 0 },
-        spend: 0,
-        roas: 0,
-        revenue: 0,
-        metaLeads: 0,
-        children: []
-      });
+  const aggregate = (target: AggregatedData, source: AggregatedData) => {
+    target.spend += source.spend;
+    target.impressions += source.impressions;
+    target.clicks += source.clicks;
+    target.leads += source.leads;
+  };
+
+  const calculateMetric = (metric: string, data: AggregatedData) => {
+    switch (metric) {
+      case 'impressions': return data.impressions;
+      case 'clicks': return data.clicks;
+      case 'leads': return data.leads;
+      case 'spend': return data.spend;
+      case 'ctr': return data.impressions > 0 ? (data.clicks / data.impressions) * 100 : 0;
+      case 'cpc': return data.clicks > 0 ? data.spend / data.clicks : 0;
+      case 'cpm': return data.impressions > 0 ? (data.spend / data.impressions) * 1000 : 0;
+      case 'cpa': return data.leads > 0 ? data.spend / data.leads : 0;
+      default: return 0;
     }
-    const camp = campaignsMap.get(row.campaignId)!;
-    camp.spend += row.spend;
-    camp.data.stage1 += row.impressions;
-    camp.data.stage2 += row.clicks;
-    camp.data.stage3 += row.leads;
-    camp.metaLeads = (camp.metaLeads || 0) + row.leads;
+  };
 
-    // 2. AdSet Level
-    if (!adSetsMap.has(row.adsetId)) {
-      const adSetNode: CampaignHierarchy = {
-        id: row.adsetId,
-        name: row.adsetName,
-        type: 'adset',
-        status: 'active',
-        data: { stage1: 0, stage2: 0, stage3: 0, stage4: 0, stage5: 0 },
-        spend: 0,
-        roas: 0,
-        revenue: 0,
-        metaLeads: 0,
-        children: []
-      };
-      adSetsMap.set(row.adsetId, adSetNode);
-      // Link AdSet to Campaign immediately if not already linked? 
-      // Better to link after aggregation to avoid duplicates in children array.
+  // Temporary map to hold raw aggregated data before mapping to stages
+  const rawDataMap = new Map<string, AggregatedData>();
+
+  const getRawData = (id: string) => {
+    if (!rawDataMap.has(id)) {
+      rawDataMap.set(id, { spend: 0, impressions: 0, clicks: 0, leads: 0 });
     }
-    const adSet = adSetsMap.get(row.adsetId)!;
-    adSet.spend += row.spend;
-    adSet.data.stage1 += row.impressions;
-    adSet.data.stage2 += row.clicks;
-    adSet.data.stage3 += row.leads;
-    adSet.metaLeads = (adSet.metaLeads || 0) + row.leads;
+    return rawDataMap.get(id)!;
+  };
 
-    // 3. Ad Level
-    if (!adsMap.has(row.adId)) {
-      const adNode: CampaignHierarchy = {
-        id: row.adId,
-        name: row.adName,
-        type: 'ad',
-        status: 'active',
-        data: { stage1: 0, stage2: 0, stage3: 0, stage4: 0, stage5: 0 },
-        spend: 0,
-        roas: 0,
-        revenue: 0,
-        metaLeads: 0
-      };
-      adsMap.set(row.adId, adNode);
-    }
-    const ad = adsMap.get(row.adId)!;
-    ad.spend += row.spend;
-    ad.data.stage1 += row.impressions;
-    ad.data.stage2 += row.clicks;
-    ad.data.stage3 += row.leads;
-    ad.metaLeads = (ad.metaLeads || 0) + row.leads;
-  }
+  const hierarchyMap = new Map<string, CampaignHierarchy>();
 
-  // Segundo passo: Construir a árvore
-  // Precisamos saber qual AdSet pertence a qual Campaign e qual Ad pertence a qual AdSet.
-  // Como iteramos sobre rows, podemos ter perdido essa relação se fizermos maps separados.
-  // Vamos re-iterar ou armazenar a relação parent-child nos maps?
-  // Melhor abordagem: Construir a árvore diretamente no loop ou usar um map auxiliar de relacionamentos.
-
-  // Vamos refazer a lógica para garantir a hierarquia correta.
-
-  const hierarchyMap = new Map<string, CampaignHierarchy>(); // CampaignId -> CampaignNode
-
+  // 1. Build Hierarchy Structure & Aggregate Raw Data
   for (const row of rows) {
     // Campaign
     if (!hierarchyMap.has(row.campaignId)) {
@@ -201,11 +186,8 @@ export async function fetchMetaHierarchy(adAccountId: string, since: string, unt
       });
     }
     const campaign = hierarchyMap.get(row.campaignId)!;
-    campaign.spend += row.spend;
-    campaign.data.stage1 += row.impressions;
-    campaign.data.stage2 += row.clicks;
-    campaign.data.stage3 += row.leads;
-    campaign.metaLeads = (campaign.metaLeads || 0) + row.leads;
+    const campRaw = getRawData(row.campaignId);
+    aggregate(campRaw, { spend: row.spend, impressions: row.impressions, clicks: row.clicks, leads: row.leads });
 
     // AdSet
     let adSet = campaign.children?.find(c => c.id === row.adsetId);
@@ -224,11 +206,8 @@ export async function fetchMetaHierarchy(adAccountId: string, since: string, unt
       };
       campaign.children?.push(adSet);
     }
-    adSet.spend += row.spend;
-    adSet.data.stage1 += row.impressions;
-    adSet.data.stage2 += row.clicks;
-    adSet.data.stage3 += row.leads;
-    adSet.metaLeads = (adSet.metaLeads || 0) + row.leads;
+    const adSetRaw = getRawData(row.adsetId);
+    aggregate(adSetRaw, { spend: row.spend, impressions: row.impressions, clicks: row.clicks, leads: row.leads });
 
     // Ad
     let ad = adSet.children?.find(c => c.id === row.adId);
@@ -246,12 +225,34 @@ export async function fetchMetaHierarchy(adAccountId: string, since: string, unt
       };
       adSet.children?.push(ad);
     }
-    ad.spend += row.spend;
-    ad.data.stage1 += row.impressions;
-    ad.data.stage2 += row.clicks;
-    ad.data.stage3 += row.leads;
-    ad.metaLeads = (ad.metaLeads || 0) + row.leads;
+    const adRaw = getRawData(row.adId);
+    aggregate(adRaw, { spend: row.spend, impressions: row.impressions, clicks: row.clicks, leads: row.leads });
   }
+
+  // 2. Map Raw Data to Configured Stages
+  const applyMetrics = (node: CampaignHierarchy) => {
+    const raw = rawDataMap.get(node.id);
+    if (raw) {
+      const stageValues = journeyMap.map(metric => calculateMetric(metric, raw));
+      node.data.stage1 = stageValues[0] || 0;
+      node.data.stage2 = stageValues[1] || 0;
+      node.data.stage3 = stageValues[2] || 0;
+      node.data.stage4 = stageValues[3] || 0;
+      node.data.stage5 = stageValues[4] || 0;
+
+      node.spend = raw.spend;
+
+      // Last configured stage is the "Result"
+      const resultMetric = journeyMap[journeyMap.length - 1];
+      node.metaLeads = calculateMetric(resultMetric, raw);
+    }
+
+    if (node.children) {
+      node.children.forEach(applyMetrics);
+    }
+  };
+
+  hierarchyMap.forEach(camp => applyMetrics(camp));
 
   return Array.from(hierarchyMap.values());
 }

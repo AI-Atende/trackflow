@@ -156,6 +156,11 @@ const HierarchyRow = ({ node, level, journeyLabels, dataSource, goals = [], sele
             {(node.metaLeads || 0).toLocaleString('pt-BR')}
           </td>
         )}
+        {dataSource === 'META' && (
+          <td className="py-3 px-4 text-right font-mono text-sm text-blue-500 font-bold">
+            {(node.metaLeads || 0).toLocaleString('pt-BR')}
+          </td>
+        )}
 
         {/* Ghost Leads */}
         {(dataSource === 'KOMMO' || dataSource === 'HYBRID') && (
@@ -236,7 +241,14 @@ export const CampaignHierarchyTable: React.FC<Props> = ({ data, loading, journey
               <th className="py-4 px-4 font-semibold text-sm text-muted-foreground text-center">Status</th>
               <th className="py-4 px-4 font-semibold text-sm text-muted-foreground text-right">Investimento</th>
               {dataSource === 'HYBRID' && (
-                <th className="py-4 px-4 font-semibold text-sm text-muted-foreground text-right text-blue-500">Meta Leads</th>
+                <th className="py-4 px-4 font-semibold text-sm text-muted-foreground text-right text-blue-500">
+                  Meta Leads
+                </th>
+              )}
+              {dataSource === 'META' && (
+                <th className="py-4 px-4 font-semibold text-sm text-muted-foreground text-right text-blue-500">
+                  {labels.length > 0 ? labels[labels.length - 1] : 'Resultado'}
+                </th>
               )}
               {(dataSource === 'KOMMO' || dataSource === 'HYBRID') && (
                 <th className="py-4 px-4 font-semibold text-sm text-gray-600 text-right bg-gray-500/10">Leads Fantasmas</th>
