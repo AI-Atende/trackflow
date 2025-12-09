@@ -1,18 +1,24 @@
 "use client";
 
 import React, { useState, useEffect, Suspense } from 'react';
-import { LayoutDashboard, BarChart3, Target, Users, Settings, Bell, Menu, Search, Sun, Moon, LogOut, User as UserIcon, Filter, TrendingUp } from "lucide-react";
-import { useSession, signOut } from "next-auth/react";
-import { useRouter } from "next/navigation";
-import { DateRangePicker, DateRange } from '@/components/DateRangePicker';
-import { subDays, format } from 'date-fns';
+
+import { useSession, signOut } from 'next-auth/react';
+import { useRouter } from 'next/navigation';
 import { useTheme } from '@/contexts/ThemeContext';
-import { CampaignHierarchyTable } from '@/components/CampaignHierarchyTable';
+
+import { format, subDays } from 'date-fns';
+import { LayoutDashboard, Filter, TrendingUp, Target, Menu, User, LogOut, User as UserIcon } from "lucide-react";
 import { CampaignHierarchy } from '@/types';
 import { Sidebar } from "@/components/Sidebar";
 import { Select } from "@/components/ui/Select";
-
+import CampaignHierarchyTable from "@/components/CampaignHierarchyTable";
+import { ViewManager } from "@/components/ViewManager";
 import { usePersistentState } from '@/hooks/usePersistentState';
+
+type DateRange = {
+  from: Date;
+  to: Date;
+};
 
 const dateRangeDeserializer = (stored: string) => {
   const parsed = JSON.parse(stored);
@@ -53,6 +59,12 @@ const CampaignsContent = () => {
 
   const [goals, setGoals] = useState<any[]>([]);
   const [selectedGoalType, setSelectedGoalType] = usePersistentState<'ROAS' | 'CPA' | 'REVENUE'>('dashboard_selectedGoalType', 'ROAS');
+
+  const [currentColumns, setCurrentColumns] = usePersistentState<string[]>('campaigns_columns', [
+    'name', 'evaluation', 'status', 'spend', 'stage1', 'stage2', 'stage3', 'stage4', 'stage5', 'revenue', 'roas', 'results'
+  ]);
+
+  const [metaJourneyMap, setMetaJourneyMap] = useState<string[]>([]);
 
   // Fetch Goals
   useEffect(() => {
@@ -137,18 +149,16 @@ const CampaignsContent = () => {
     }
 
     // 1.5 Fetch Meta Config if needed (for labels)
-    if (dataSource === 'META') {
+    if (dataSource === 'META' || dataSource === 'HYBRID') {
       try {
         const res = await fetch(`/api/integrations/meta/config`);
         if (res.ok) {
           const config = await res.json();
           if (config.journeyMap) {
-            // If Kommo is not active, use Meta config.
-            // If Kommo IS active, we might want to prefer Kommo config for Hybrid,
-            // but for pure META source, we should definitely use Meta config.
-            // However, the state is single `integrationConfig`.
-            // Let's update it if we are in META mode.
-            setIntegrationConfig({ isActive: true, journeyMap: config.journeyMap });
+            if (dataSource === 'META') {
+              setIntegrationConfig({ isActive: true, journeyMap: config.journeyMap });
+            }
+            setMetaJourneyMap(config.journeyMap);
           }
         }
       } catch (e) {
@@ -163,8 +173,6 @@ const CampaignsContent = () => {
       const sinceLocal = format(dateRange.from, 'yyyy-MM-dd');
       const untilLocal = format(dateRange.to, 'yyyy-MM-dd');
 
-      // Se Kommo inativo e selecionado Kommo, fallback para Meta?
-      // Ou mostrar erro? O dashboard faz fallback. Vamos fazer fallback também.
       let effectiveSource = dataSource;
       if (dataSource !== 'META' && !isKommoActive) {
         effectiveSource = 'META';
@@ -213,42 +221,20 @@ const CampaignsContent = () => {
       />
 
       {/* Main Content */}
-      <main className="flex-1 flex flex-col h-screen relative overflow-hidden">
+      <main className="flex-1 flex flex-col h-screen relative overflow-x-hidden">
         {/* Header */}
-        <header className="h-16 bg-card/80 backdrop-blur-md border-b border-border flex items-center justify-between px-4 md:px-8 shadow-sm z-30">
+        <header className="h-16 bg-card/80 backdrop-blur-md border-b border-border flex items-center justify-between px-4 md:px-8 shadow-sm z-30 sticky top-0">
           <div className="flex items-center gap-4">
             <button
               className="md:hidden p-2 -ml-2 text-slate-500 hover:bg-slate-100 rounded-lg"
               onClick={() => setIsMobileMenuOpen(true)}
             >
-              <Menu size={24} />
+              <Menu />
             </button>
-            <DateRangePicker date={dateRange} setDate={setDateRange} />
           </div>
 
-          <div className="flex items-center gap-6">
-            <div className="hidden sm:block relative max-w-xs">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" size={16} />
-              <input
-                type="text"
-                placeholder="Buscar campanhas..."
-                className="w-full pl-9 pr-4 py-1.5 rounded-full bg-secondary/50 border-none focus:ring-2 focus:ring-brand-500/50 text-sm placeholder-muted-foreground outline-none transition-all text-foreground"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
-            </div>
-
-            <div className="flex items-center gap-2">
-              <button
-                onClick={toggleTheme}
-                className="p-2 text-muted-foreground hover:text-brand-600 hover:bg-brand-50/10 rounded-full transition-all"
-                title="Alternar Tema"
-              >
-                {theme === 'dark' ? <Sun size={20} /> : <Moon size={20} />}
-              </button>
-            </div>
-
-            {/* Profile Dropdown */}
+          <div className="flex items-center gap-4">
+            {/* Profile Menu */}
             <div
               className="relative"
               onMouseEnter={() => setIsProfileMenuOpen(true)}
@@ -270,6 +256,7 @@ const CampaignsContent = () => {
                 </div>
               </div>
 
+              {/* Hover Dropdown */}
               {isProfileMenuOpen && (
                 <div className="absolute right-0 top-full w-64 bg-popover text-popover-foreground rounded-xl shadow-xl border border-border overflow-hidden transition-all transform origin-top-right z-50">
                   <div className="p-4 border-b border-border bg-accent/50">
@@ -300,10 +287,6 @@ const CampaignsContent = () => {
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-6 md:p-8 space-y-8 bg-background">
-
-
-
-
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
             <div>
               <h1 className="text-2xl font-bold text-foreground tracking-tight">Campanhas</h1>
@@ -327,6 +310,27 @@ const CampaignsContent = () => {
                   placeholder="Meta"
                 />
               </div>
+
+              {/* View Manager */}
+              <ViewManager
+                dataSource={dataSource}
+                availableColumns={[
+                  { key: 'name', label: 'Campanha' },
+                  { key: 'evaluation', label: 'Avaliação' },
+                  { key: 'status', label: 'Status' },
+                  { key: 'spend', label: 'Investimento' },
+                  { key: 'revenue', label: 'Receita' },
+                  { key: 'roas', label: 'ROAS' },
+                  { key: 'results', label: 'Resultados' },
+                  { key: 'ghostLeads', label: 'Leads Fantasmas' },
+                  ...((integrationConfig?.journeyMap || ['Etapa 1', 'Etapa 2', 'Etapa 3', 'Etapa 4', 'Etapa 5']).map((label, i) => ({
+                    key: `stage${i + 1}`,
+                    label: label
+                  })))
+                ]}
+                currentColumns={currentColumns}
+                onColumnsChange={setCurrentColumns}
+              />
 
               {/* Data Source Selector */}
               {(() => {
@@ -380,6 +384,9 @@ const CampaignsContent = () => {
                     dataSource={dataSource}
                     goals={goals}
                     selectedGoalType={selectedGoalType}
+                    columns={currentColumns}
+                    onColumnsReorder={setCurrentColumns}
+                    metaResultLabel={metaJourneyMap[metaJourneyMap.length - 1]}
                   />
                 </div>
 
@@ -399,6 +406,9 @@ const CampaignsContent = () => {
                       dataSource="META" // Treat as Meta source for columns
                       goals={goals}
                       selectedGoalType={selectedGoalType}
+                      columns={currentColumns}
+                      onColumnsReorder={setCurrentColumns}
+                      metaResultLabel={metaJourneyMap[metaJourneyMap.length - 1]}
                     />
                   </div>
                 )}
@@ -411,12 +421,15 @@ const CampaignsContent = () => {
                 dataSource={dataSource}
                 goals={goals}
                 selectedGoalType={selectedGoalType}
+                columns={currentColumns}
+                onColumnsReorder={setCurrentColumns}
+                metaResultLabel={metaJourneyMap[metaJourneyMap.length - 1]}
               />
             )
           }
-        </div >
-      </main >
-    </div >
+        </div>
+      </main>
+    </div>
   );
 };
 

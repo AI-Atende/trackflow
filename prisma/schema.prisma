@@ -41,6 +41,9 @@ model Client {
   // Goals
   goals           ClientGoal[]
 
+  // Views
+  tableViews      TableView[]
+
   createdAt      DateTime            @default(now())
   updatedAt      DateTime            @updatedAt
 }
@@ -141,4 +144,18 @@ model ClientGoal {
 
   @@unique([clientId, type, stageIndex]) // Ensure one goal per type/stage per client
   @@index([clientId])
+}
+
+model TableView {
+  id          String   @id @default(cuid())
+  clientId    String
+  client      Client   @relation(fields: [clientId], references: [id])
+  name        String
+  dataSource  String   // "KOMMO", "META", "HYBRID"
+  columns     Json     // Array of column keys e.g. ["name", "status", "spend"]
+  isDefault   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([clientId, dataSource])
 }

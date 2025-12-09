@@ -2,22 +2,25 @@
 
 import React, { useState, useEffect, Suspense } from 'react';
 import { LayoutDashboard, BarChart3, Target, Users, Settings, Bell, ChevronDown, LogOut, TrendingUp, Calendar, User, Search, RefreshCw, Layers, Menu, X, Moon, Sun, Filter } from "lucide-react";
-import { STAGE_DESCRIPTIONS, STAGE_COLORS } from '@/constants';
-import { MetricCard } from '@/components/MetricCard';
-import { DateRangePicker, DateRange } from '@/components/DateRangePicker';
-import { subDays, format } from 'date-fns';
-import { useSession, signOut } from "next-auth/react";
-import { useRouter } from "next/navigation";
-import { TrackingTable } from '@/components/TrackingTable';
-import { FunnelChart } from '@/components/FunnelChart';
-import { AiInsights } from '@/components/AiInsights';
-import { useSearchParams } from 'next/navigation';
-import { useToast } from '@/contexts/ToastContext';
-import { useTheme } from '@/contexts/ThemeContext';
 import { MetricSummary } from '@/types';
 import { usePersistentState } from '@/hooks/usePersistentState';
 import { Sidebar } from "@/components/Sidebar";
 import { Select } from "@/components/ui/Select";
+import { ViewManager } from "@/components/ViewManager";
+import { useSession, signOut } from 'next-auth/react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { useToast } from '@/contexts/ToastContext';
+import { useTheme } from '@/contexts/ThemeContext';
+import { format, subDays } from 'date-fns';
+import { MetricCard } from '@/components/MetricCard';
+import { FunnelChart } from '@/components/FunnelChart';
+import { AiInsights } from '@/components/AiInsights';
+import { TrackingTable } from '@/components/TrackingTable';
+
+type DateRange = {
+    from: Date;
+    to: Date;
+};
 
 const SyncButton = ({ session, onSyncSuccess, dateRange }: { session: any, onSyncSuccess?: () => void, dateRange: DateRange }) => {
     const [isSyncing, setIsSyncing] = useState(false);
@@ -97,8 +100,16 @@ const HomeContent = () => {
 
     const [integrationConfig, setIntegrationConfig] = useState<{ isActive: boolean, journeyMap: string[] } | null>(null);
 
+
+
     const [goals, setGoals] = useState<any[]>([]);
     const [selectedGoalType, setSelectedGoalType] = usePersistentState<'ROAS' | 'CPA' | 'REVENUE'>('dashboard_selectedGoalType', 'ROAS');
+
+    const [currentColumns, setCurrentColumns] = usePersistentState<string[]>('dashboard_columns', [
+        'name', 'evaluation', 'status', 'spend', 'stage1', 'stage2', 'stage3', 'stage4', 'stage5', 'revenue', 'roas', 'results'
+    ]);
+
+    const [metaJourneyMap, setMetaJourneyMap] = useState<string[]>([]);
 
     // Fetch Goals
     useEffect(() => {
@@ -329,24 +340,37 @@ const HomeContent = () => {
         }
 
         // 2. Decidir qual dado buscar
-        if (dataSource === 'META') {
-            // Fetch Meta Config for Labels
+        if (dataSource === 'META' || dataSource === 'HYBRID') {
+            // Fetch Meta Config for Labels (Needed for Hybrid too now)
             try {
                 const res = await fetch(`/api/integrations/meta/config`);
                 if (res.ok) {
                     const config = await res.json();
                     if (config.journeyMap) {
-                        setIntegrationConfig({ isActive: true, journeyMap: config.journeyMap });
+                        if (dataSource === 'META') {
+                            setIntegrationConfig({ isActive: true, journeyMap: config.journeyMap });
+                        }
+                        setMetaJourneyMap(config.journeyMap);
                     }
                 }
             } catch (e) {
                 console.error("Erro ao buscar config Meta:", e);
             }
-            fetchMetaDashboardData();
+
+            if (dataSource === 'META') {
+                fetchMetaDashboardData();
+            } else if (isKommoActive) {
+                fetchKommoDashboardData(journeyMap);
+            } else {
+                // Fallback if Hybrid but Kommo inactive
+                setDataSource('META');
+                setSelectedCampaignId(null);
+                return;
+            }
         } else if (isKommoActive) {
             fetchKommoDashboardData(journeyMap);
         } else {
-            // Se Kommo inativo e selecionado Kommo/Hybrid -> Fallback para Meta
+            // Se Kommo inativo e selecionado Kommo -> Fallback para Meta
             setDataSource('META');
             setSelectedCampaignId(null);
             return; // O useEffect vai rodar novamente com dataSource='META'
@@ -434,39 +458,8 @@ const HomeContent = () => {
                             className="md:hidden p-2 -ml-2 text-slate-500 hover:bg-slate-100 rounded-lg"
                             onClick={() => setIsMobileMenuOpen(true)}
                         >
-                            <Menu size={24} />
+                            <Menu />
                         </button>
-                        <DateRangePicker date={dateRange} setDate={setDateRange} />
-                    </div>
-
-                    <div className="flex items-center gap-6">
-                        <div className="hidden sm:block relative max-w-xs">
-                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" size={16} />
-                            <input
-                                type="text"
-                                placeholder="Buscar..."
-                                className="w-full pl-9 pr-4 py-1.5 rounded-full bg-secondary/50 border-none focus:ring-2 focus:ring-brand-500/50 text-sm placeholder-muted-foreground outline-none transition-all text-foreground"
-                                value={searchTerm}
-                                onChange={(e) => setSearchTerm(e.target.value)}
-                            />
-                        </div>
-
-                        <div className="flex items-center gap-2">
-                            <SyncButton session={session} onSyncSuccess={checkIntegrationAndFetch} dateRange={dateRange} />
-                            <button className="p-2 text-muted-foreground hover:text-brand-600 hover:bg-brand-50/10 rounded-full transition-all relative">
-                                <Bell size={20} />
-                                <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full border-2 border-background"></span>
-                            </button>
-
-                            <button
-                                onClick={toggleTheme}
-                                className="p-2 text-muted-foreground hover:text-brand-600 hover:bg-brand-50/10 rounded-full transition-all"
-                                title="Alternar Tema"
-                            >
-                                {theme === 'dark' ? <Sun size={20} /> : <Moon size={20} />}
-                            </button>
-                        </div>
-
                         <div
                             className="relative"
                             onMouseEnter={() => setIsProfileMenuOpen(true)}
@@ -628,6 +621,27 @@ const HomeContent = () => {
                                         />
                                     </div>
                                 </div>
+
+                                {/* View Manager */}
+                                <ViewManager
+                                    dataSource={dataSource}
+                                    availableColumns={[
+                                        { key: 'name', label: 'Campanha' },
+                                        { key: 'evaluation', label: 'Avaliação' },
+                                        { key: 'status', label: 'Status' },
+                                        { key: 'spend', label: 'Investimento' },
+                                        { key: 'revenue', label: 'Receita' },
+                                        { key: 'roas', label: 'ROAS' },
+                                        { key: 'results', label: 'Resultados' },
+                                        { key: 'ghostLeads', label: 'Leads Fantasmas' },
+                                        ...((integrationConfig?.journeyMap || ['Etapa 1', 'Etapa 2', 'Etapa 3', 'Etapa 4', 'Etapa 5']).map((label, i) => ({
+                                            key: `stage${i + 1}`,
+                                            label: label
+                                        })))
+                                    ]}
+                                    currentColumns={currentColumns}
+                                    onColumnsChange={setCurrentColumns}
+                                />
                             </div>
 
                             <div className="flex gap-2 flex-wrap justify-end">
@@ -661,6 +675,9 @@ const HomeContent = () => {
                                         loading={isLoadingData}
                                         goals={goals}
                                         selectedGoalType={selectedGoalType}
+                                        columns={currentColumns}
+                                        onColumnsReorder={setCurrentColumns}
+                                        metaResultLabel={metaJourneyMap[metaJourneyMap.length - 1]}
                                     />
                                 </div>
 
@@ -676,6 +693,9 @@ const HomeContent = () => {
                                             loading={isLoadingData}
                                             goals={goals}
                                             selectedGoalType={selectedGoalType}
+                                            columns={currentColumns}
+                                            onColumnsReorder={setCurrentColumns}
+                                            metaResultLabel={metaJourneyMap[metaJourneyMap.length - 1]}
                                         />
                                     </div>
                                 )}
@@ -690,13 +710,16 @@ const HomeContent = () => {
                                 loading={isLoadingData}
                                 goals={goals}
                                 selectedGoalType={selectedGoalType}
+                                columns={currentColumns}
+                                onColumnsReorder={setCurrentColumns}
+                                metaResultLabel={metaJourneyMap[metaJourneyMap.length - 1]}
                             />
                         )}
-                    </section >
+                    </section>
 
-                </div >
-            </main >
-        </div >
+                </div>
+            </main>
+        </div>
     );
 };
 

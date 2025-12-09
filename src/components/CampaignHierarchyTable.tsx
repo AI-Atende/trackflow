@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { ChevronRight, ChevronDown } from 'lucide-react';
 import { CampaignHierarchy } from '@/types';
 import { Tooltip } from './Tooltip';
+import { Skeleton } from './Skeleton';
 import { useToast } from '@/contexts/ToastContext';
 
 const toRoman = (num: number): string => {
@@ -13,24 +14,163 @@ const toRoman = (num: number): string => {
   return map[num] || num.toString();
 };
 
+const formatNumber = (num: number) => {
+  return new Intl.NumberFormat('pt-BR', { notation: "compact", compactDisplay: "short" }).format(num);
+};
+
+const formatCurrency = (num: number) => {
+  return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(num);
+};
+
 interface Props {
   data: CampaignHierarchy[];
   loading: boolean;
-  journeyLabels?: string[]; // Labels for columns (I, II, III...)
+  journeyLabels?: string[];
   dataSource?: 'KOMMO' | 'META' | 'HYBRID';
   goals?: any[];
   selectedGoalType?: 'ROAS' | 'CPA' | 'REVENUE';
+  columns?: string[];
+  onColumnsReorder?: (columns: string[]) => void;
+  metaResultLabel?: string;
 }
 
-const HierarchyRow = ({ node, level, journeyLabels, dataSource, goals = [], selectedGoalType = 'ROAS' }: { node: CampaignHierarchy, level: number, journeyLabels?: string[], dataSource?: 'KOMMO' | 'META' | 'HYBRID', goals?: any[], selectedGoalType?: 'ROAS' | 'CPA' | 'REVENUE' }) => {
-  const [expanded, setExpanded] = useState(false);
-  const { showToast } = useToast();
-  const hasChildren = node.children && node.children.length > 0;
+interface RowProps {
+  node: CampaignHierarchy;
+  level: number;
+  columns: string[];
+  renderCell: (node: CampaignHierarchy, key: string) => React.ReactNode;
+  onCopy: (text: string) => void;
+  evaluation: any;
+}
 
+const HierarchyRow: React.FC<RowProps> = ({ node, level, columns, renderCell, onCopy, evaluation }) => {
+  const [expanded, setExpanded] = useState(false);
+  const hasChildren = node.children && node.children.length > 0;
   const paddingLeft = level * 20 + 10;
 
-  const handleCopy = (e: React.MouseEvent, text: string) => {
-    e.stopPropagation();
+  return (
+    <>
+      <tr className={`border-b border-border transition-colors ${evaluation.bg || ''} ${evaluation.hoverBg || 'hover:bg-secondary/20'}`}>
+        {columns.map(key => {
+          if (key === 'name') {
+            return (
+              <td key={key} className="py-3 pr-4" style={{ paddingLeft: `${paddingLeft}px` }}>
+                <div className="flex items-center gap-2">
+                  {hasChildren ? (
+                    <button onClick={() => setExpanded(!expanded)} className="text-muted-foreground hover:text-foreground">
+                      {expanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                    </button>
+                  ) : (
+                    <div className="w-4" />
+                  )}
+
+                  <span
+                    className={`font-medium ${level === 0 ? 'text-foreground' : 'text-muted-foreground'} truncate max-w-[350px] hover:text-brand-500 cursor-copy transition-colors`}
+                    title={node.name}
+                    onClick={(e) => { e.stopPropagation(); onCopy(node.name); }}
+                  >
+                    {node.name}
+                  </span>
+
+                  {level === 0 && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-brand-500/10 text-brand-500 border border-brand-500/20">Campanha</span>}
+                  {level === 1 && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-blue-500/10 text-blue-500 border border-blue-500/20">Conjunto</span>}
+                  {level === 2 && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-purple-500/10 text-purple-500 border border-purple-500/20">Anúncio</span>}
+                </div>
+              </td>
+            );
+          }
+          return renderCell(node, key);
+        })}
+      </tr>
+      {expanded && hasChildren && node.children!.map(child => (
+        <HierarchyRow
+          key={child.id}
+          node={child}
+          level={level + 1}
+          columns={columns}
+          renderCell={renderCell}
+          onCopy={onCopy}
+          evaluation={evaluation}
+        />
+      ))}
+    </>
+  );
+};
+
+// Wrapper to handle recursive evaluation calculation
+const HierarchyRowWrapper = ({ node, level, columns, renderCell, onCopy, getEvaluation }: { node: CampaignHierarchy, level: number, columns: string[], renderCell: (node: CampaignHierarchy, key: string) => React.ReactNode, onCopy: (text: string) => void, getEvaluation: (node: CampaignHierarchy) => any }) => {
+  const [expanded, setExpanded] = useState(false);
+  const hasChildren = node.children && node.children.length > 0;
+  const paddingLeft = level * 20 + 10;
+  const evaluation = node.isOrphan ? { level: '', color: '', bg: '', hoverBg: '', activeBg: '', emoji: '-' } : getEvaluation(node);
+
+  return (
+    <>
+      <tr className={`border-b border-border transition-colors ${evaluation.bg || ''} ${evaluation.hoverBg || 'hover:bg-secondary/20'}`}>
+        {columns.map(key => {
+          if (key === 'name') {
+            return (
+              <td key={key} className="py-3 pr-4" style={{ paddingLeft: `${paddingLeft}px` }}>
+                <div className="flex items-center gap-2">
+                  {hasChildren ? (
+                    <button onClick={() => setExpanded(!expanded)} className="text-muted-foreground hover:text-foreground">
+                      {expanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                    </button>
+                  ) : (
+                    <div className="w-4" />
+                  )}
+
+                  <span
+                    className={`font-medium ${level === 0 ? 'text-foreground' : 'text-muted-foreground'} truncate max-w-[350px] hover:text-brand-500 cursor-copy transition-colors`}
+                    title={node.name}
+                    onClick={(e) => { e.stopPropagation(); onCopy(node.name); }}
+                  >
+                    {node.name}
+                  </span>
+
+                  {level === 0 && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-brand-500/10 text-brand-500 border border-brand-500/20">Campanha</span>}
+                  {level === 1 && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-blue-500/10 text-blue-500 border border-blue-500/20">Conjunto</span>}
+                  {level === 2 && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-purple-500/10 text-purple-500 border border-purple-500/20">Anúncio</span>}
+                </div>
+              </td>
+            );
+          }
+          return renderCell(node, key);
+        })}
+      </tr>
+      {expanded && hasChildren && node.children!.map(child => (
+        <HierarchyRowWrapper
+          key={child.id}
+          node={child}
+          level={level + 1}
+          columns={columns}
+          renderCell={renderCell}
+          onCopy={onCopy}
+          getEvaluation={getEvaluation}
+        />
+      ))}
+    </>
+  );
+};
+
+export default function CampaignHierarchyTable({
+  data,
+  loading,
+  journeyLabels,
+  dataSource = 'META',
+  goals = [],
+  selectedGoalType = 'ROAS',
+  columns,
+  onColumnsReorder,
+  metaResultLabel
+}: Props) {
+  const { showToast } = useToast();
+  const labels = journeyLabels || ["Impressões", "Cliques", "Leads", "Checkout", "Vendas"];
+
+  // Default columns
+  const activeColumns = columns || ['name', 'evaluation', 'status', 'spend', 'stage1', 'stage2', 'stage3', 'stage4', 'stage5', 'revenue', 'roas', 'results'];
+
+  const handleCopy = (text: string) => {
     navigator.clipboard.writeText(text);
     showToast(`"${text}" copiado!`, "success");
   };
@@ -38,17 +178,15 @@ const HierarchyRow = ({ node, level, journeyLabels, dataSource, goals = [], sele
   const getGoalValue = (type: 'ROAS' | 'CPA' | 'REVENUE', stageIndex?: number) => {
     const safeGoals = Array.isArray(goals) ? goals : [];
     const goal = safeGoals.find(g => g.type === type && (stageIndex === undefined || g.stageIndex === stageIndex));
-    // Defaults: ROAS 5, CPA 50, REVENUE 10000
     return goal ? goal.value : (type === 'ROAS' ? 5.0 : (type === 'REVENUE' ? 10000.0 : 50.0));
   };
 
-  const getEvaluation = (campaign: CampaignHierarchy) => {
-    const spend = campaign.spend || 0;
+  const getEvaluation = (node: CampaignHierarchy) => {
+    const spend = node.spend || 0;
 
     if (selectedGoalType === 'ROAS') {
-      const roas = spend > 0 ? (campaign.revenue || 0) / spend : 0;
+      const roas = spend > 0 ? (node.revenue || 0) / spend : 0;
       const target = getGoalValue('ROAS');
-
       const roasRounded = Math.round(roas * 100) / 100;
       const targetRounded = Math.round(target * 100) / 100;
 
@@ -56,9 +194,8 @@ const HierarchyRow = ({ node, level, journeyLabels, dataSource, goals = [], sele
       if (roasRounded === targetRounded) return { level: 'Aceitável', color: 'text-yellow-500', bg: 'bg-yellow-500/10', hoverBg: 'hover:bg-yellow-500/20', activeBg: 'bg-yellow-500/20', emoji: '😐' };
       return { level: 'Crítico', color: 'text-red-500', bg: 'bg-red-500/10', hoverBg: 'hover:bg-red-500/20', activeBg: 'bg-red-500/20', emoji: '😟' };
     } else if (selectedGoalType === 'REVENUE') {
-      const revenue = campaign.revenue || 0;
+      const revenue = node.revenue || 0;
       const target = getGoalValue('REVENUE');
-
       const revenueRounded = Math.round(revenue * 100) / 100;
       const targetRounded = Math.round(target * 100) / 100;
 
@@ -66,22 +203,15 @@ const HierarchyRow = ({ node, level, journeyLabels, dataSource, goals = [], sele
       if (revenueRounded === targetRounded) return { level: 'Aceitável', color: 'text-yellow-500', bg: 'bg-yellow-500/10', hoverBg: 'hover:bg-yellow-500/20', activeBg: 'bg-yellow-500/20', emoji: '😐' };
       return { level: 'Crítico', color: 'text-red-500', bg: 'bg-red-500/10', hoverBg: 'hover:bg-red-500/20', activeBg: 'bg-red-500/20', emoji: '😟' };
     } else {
-      // CPA Evaluation
-      let stageIndex = 2; // Default to index 2 (Stage 3) if parsing fails
-      if (selectedGoalType && selectedGoalType.startsWith('CPA_')) {
+      let stageIndex = 2;
+      if (selectedGoalType.startsWith('CPA_')) {
         const parts = selectedGoalType.split('_');
-        if (parts.length > 1) {
-          stageIndex = parseInt(parts[1], 10);
-        }
+        if (parts.length > 1) stageIndex = parseInt(parts[1], 10);
       }
-
-      // Dynamic Stage Access (stage1, stage2, etc.)
-      const stageKey = `stage${stageIndex + 1}` as keyof typeof campaign.data;
-      const conversions = campaign.data[stageKey] || 0;
-
+      const stageKey = `stage${stageIndex + 1}` as keyof typeof node.data;
+      const conversions = node.data[stageKey] || 0;
       const cpa = conversions > 0 ? spend / conversions : 0;
       const target = getGoalValue('CPA', stageIndex);
-
       const cpaRounded = Math.round(cpa * 100) / 100;
       const targetRounded = Math.round(target * 100) / 100;
 
@@ -91,47 +221,107 @@ const HierarchyRow = ({ node, level, journeyLabels, dataSource, goals = [], sele
     }
   };
 
-  const evaluation = node.isOrphan ? { level: '', color: '', bg: '', hoverBg: '', activeBg: '', emoji: '-' } : getEvaluation(node);
+  const handleDragStart = (e: React.DragEvent<HTMLTableHeaderCellElement>, key: string) => {
+    e.dataTransfer.setData('text/plain', key);
+    e.dataTransfer.effectAllowed = 'move';
+  };
 
-  return (
-    <>
-      <tr className={`border-b border-border transition-colors ${evaluation.bg ? evaluation.bg : (level > 0 ? 'bg-secondary/5' : '')} ${evaluation.hoverBg ? evaluation.hoverBg : 'hover:bg-secondary/20'}`}>
-        <td className="py-3 pr-4" style={{ paddingLeft: `${paddingLeft}px` }}>
-          <div className="flex items-center gap-2">
-            {hasChildren && (
-              <button onClick={() => setExpanded(!expanded)} className="text-muted-foreground hover:text-foreground">
-                {expanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
-              </button>
-            )}
-            {!hasChildren && <div className="w-4" />} {/* Spacer */}
+  const handleDragOver = (e: React.DragEvent<HTMLTableHeaderCellElement>) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+  };
 
-            <span
-              className={`font-medium ${level === 0 ? 'text-foreground' : 'text-muted-foreground'} truncate max-w-[300px] hover:text-brand-500 cursor-copy transition-colors`}
-              title="Copiar"
-              onClick={(e) => handleCopy(e, node.name)}
-            >
-              {node.name}
+  const handleDrop = (e: React.DragEvent<HTMLTableHeaderCellElement>, targetKey: string) => {
+    e.preventDefault();
+    const draggedKey = e.dataTransfer.getData('text/plain');
+    if (draggedKey === targetKey) return;
+
+    if (activeColumns && onColumnsReorder) {
+      const newColumns = [...activeColumns];
+      const draggedIndex = newColumns.indexOf(draggedKey);
+      const targetIndex = newColumns.indexOf(targetKey);
+
+      if (draggedIndex !== -1 && targetIndex !== -1) {
+        newColumns.splice(draggedIndex, 1);
+        newColumns.splice(targetIndex, 0, draggedKey);
+        onColumnsReorder(newColumns);
+      }
+    }
+  };
+
+  const renderHeader = (key: string) => {
+    let content;
+    if (key.startsWith('stage')) {
+      const index = parseInt(key.replace('stage', '')) - 1;
+      const label = labels[index] || toRoman(index + 1);
+      content = label;
+    } else {
+      switch (key) {
+        case 'name': content = 'Nome'; break;
+        case 'evaluation': content = 'Aval.'; break;
+        case 'status': content = 'Status'; break;
+        case 'spend': content = 'Investimento'; break;
+        case 'revenue': content = 'Receita'; break;
+        case 'roas': content = 'ROAS'; break;
+        case 'ghostLeads': content = 'Fantasmas'; break;
+        case 'results':
+          if (dataSource === 'HYBRID' && metaResultLabel) {
+            content = `Meta ${metaResultLabel}`;
+          } else {
+            content = dataSource === 'META'
+              ? (journeyLabels && journeyLabels.length > 0 ? `Meta ${journeyLabels[journeyLabels.length - 1]}` : 'Meta Resultado')
+              : (journeyLabels && journeyLabels.length > 0 ? journeyLabels[journeyLabels.length - 1] : 'Resultado');
+          }
+          break;
+        default: content = null;
+      }
+    }
+
+    if (!content) return null;
+
+    return (
+      <th
+        key={key}
+        draggable
+        onDragStart={(e) => handleDragStart(e, key)}
+        onDragOver={handleDragOver}
+        onDrop={(e) => handleDrop(e, key)}
+        className={`px-4 py-3 text-center text-xs font-semibold uppercase tracking-wider text-muted-foreground cursor-move hover:bg-secondary/50 transition-colors ${key === 'name' ? 'text-left min-w-[300px]' : (key === 'spend' || key === 'revenue' || key === 'roas' ? 'text-right' : '')} ${key === 'results' ? 'text-blue-500' : ''}`}
+      >
+        {content}
+      </th>
+    );
+  };
+
+  const renderCell = (node: CampaignHierarchy, key: string) => {
+    const evaluation = node.isOrphan ? { level: '', color: '', bg: '', hoverBg: '', activeBg: '', emoji: '-' } : getEvaluation(node);
+
+    if (key.startsWith('stage')) {
+      const index = parseInt(key.replace('stage', '')) - 1;
+      const value = node.data[key as keyof typeof node.data] || 0;
+      const spend = node.spend || 0;
+      const costPerStep = value > 0 ? spend / value : 0;
+      const label = labels[index] || toRoman(index + 1);
+
+      return (
+        <td key={key} className="px-4 py-3 text-center">
+          <Tooltip content={
+            <div className="text-center">
+              <p className="font-bold">{label}</p>
+              <p className="text-xs opacity-80">Custo: {formatCurrency(costPerStep)}</p>
+            </div>
+          } position="top">
+            <span className="text-muted-foreground cursor-help border-b border-dotted border-muted-foreground/50">
+              {formatNumber(value)}
             </span>
-            {level === 0 && (
-              <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-brand-500/10 text-brand-500 border border-brand-500/20">
-                Campanha
-              </span>
-            )}
-            {level === 1 && (
-              <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-blue-500/10 text-blue-500 border border-blue-500/20">
-                Conjunto
-              </span>
-            )}
-            {level === 2 && (
-              <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-purple-500/10 text-purple-500 border border-purple-500/20">
-                Anúncio
-              </span>
-            )}
-          </div>
+          </Tooltip>
         </td>
+      );
+    }
 
-        {/* Evaluation Emoji */}
-        <td className="py-3 px-4 text-center text-lg">
+    switch (key) {
+      case 'evaluation': return (
+        <td key={key} className="px-4 py-3 text-center text-lg">
           {node.isOrphan ? (
             <span className="text-muted-foreground">-</span>
           ) : (
@@ -140,140 +330,93 @@ const HierarchyRow = ({ node, level, journeyLabels, dataSource, goals = [], sele
             </Tooltip>
           )}
         </td>
-
-        <td className="py-3 px-4 text-center">
+      );
+      case 'status': return (
+        <td key={key} className="px-4 py-3 text-center">
           <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${node.status === 'active' ? 'bg-green-500/10 text-green-500' : 'bg-yellow-500/10 text-yellow-500'}`}>
             {node.status === 'active' ? 'Ativo' : 'Pausado'}
           </span>
         </td>
-        <td className="py-3 px-4 text-right font-mono text-sm text-foreground">
-          {node.spend.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+      );
+      case 'spend': return <td key={key} className="px-4 py-3 text-right font-mono text-sm text-foreground">{formatCurrency(node.spend || 0)}</td>;
+      case 'revenue': return <td key={key} className="px-4 py-3 text-right font-bold text-brand-500">{formatCurrency(node.revenue || 0)}</td>;
+      case 'roas': return (
+        <td key={key} className="px-4 py-3 text-right">
+          {dataSource === 'HYBRID' ? (
+            <span className={`px-2 py-1 rounded-full text-xs font-bold ${evaluation.color} ${evaluation.bg}`}>
+              {(node.spend && node.spend > 0 ? (node.revenue || 0) / node.spend : 0).toFixed(2)}x
+            </span>
+          ) : (
+            <span>{(node.roas || 0).toFixed(2)}x</span>
+          )}
         </td>
-
-        {/* Meta Leads (Stage 0) */}
-        {dataSource === 'HYBRID' && (
-          <td className="py-3 px-4 text-right font-mono text-sm text-blue-500 font-bold">
-            {(node.metaLeads || 0).toLocaleString('pt-BR')}
-          </td>
-        )}
-        {dataSource === 'META' && (
-          <td className="py-3 px-4 text-right font-mono text-sm text-blue-500 font-bold">
-            {(node.metaLeads || 0).toLocaleString('pt-BR')}
-          </td>
-        )}
-
-        {/* Ghost Leads */}
-        {(dataSource === 'KOMMO' || dataSource === 'HYBRID') && (
-          <td className="py-3 px-4 text-right font-mono text-sm text-gray-600 font-bold bg-gray-500/10">
-            {(node.ghostLeads || 0).toLocaleString('pt-BR')}
-          </td>
-        )}
-
-        {/* Dynamic Stages */}
-        {(journeyLabels || ["I", "II", "III", "IV", "V"]).map((label, index) => {
-          const stageKey = `stage${index + 1}` as keyof typeof node.data;
-          const value = node.data[stageKey];
-          const spend = node.spend || 0;
-          const costPerStep = value > 0 ? spend / value : 0;
-
-          return (
-            <td key={index} className="py-3 px-4 text-right font-mono text-sm text-foreground">
-              <Tooltip content={
-                <div className="text-center">
-                  <p className="font-bold">{label}</p>
-                  <p className="text-xs opacity-80">Custo: {costPerStep.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
-                </div>
-              } position="top">
-                <span className="cursor-help border-b border-dotted border-muted-foreground/50">
-                  {value.toLocaleString('pt-BR')}
-                </span>
-              </Tooltip>
-            </td>
-          );
-        })}
-
-        {/* Revenue */}
-        <td className="py-3 px-4 text-right font-mono text-sm text-foreground">
-          {(node.revenue || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+      );
+      case 'ghostLeads': return (
+        <td key={key} className="px-4 py-3 text-center text-gray-600 font-bold bg-gray-500/10">
+          {formatNumber(node.ghostLeads || 0)}
         </td>
-
-        {/* ROAS */}
-        {dataSource === 'HYBRID' && (
-          <td className="py-3 px-4 text-right font-mono text-sm text-foreground">
-            {(() => {
-              const spend = node.spend || 0;
-              const roas = spend > 0 ? (node.revenue || 0) / spend : 0;
-              return (
-                <span className={`px-2 py-1 rounded-full text-xs font-bold ${evaluation.color} ${evaluation.bg}`}>
-                  {roas.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                </span>
-              );
-            })()}
-          </td>
-        )}
-      </tr>
-      {expanded && node.children?.map((child) => (
-        <HierarchyRow key={child.id} node={child} level={level + 1} journeyLabels={journeyLabels} dataSource={dataSource} goals={goals} selectedGoalType={selectedGoalType} />
-      ))}
-    </>
-  );
-};
-
-export const CampaignHierarchyTable: React.FC<Props> = ({ data, loading, journeyLabels, dataSource, goals, selectedGoalType }) => {
-  const labels = journeyLabels || ["Impressões", "Cliques", "Leads", "Checkout", "Vendas"];
+      );
+      case 'results': return (
+        <td key={key} className="px-4 py-3 text-center font-bold text-blue-600 dark:text-blue-400">
+          {formatNumber(node.metaLeads || node.data.stage5 || 0)}
+        </td>
+      );
+      default: return <td key={key}></td>;
+    }
+  };
 
   if (loading) {
     return (
-      <div className="w-full bg-card/50 backdrop-blur-md border border-border rounded-xl shadow-xl overflow-hidden glass p-8 flex justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-500"></div>
+      <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-sm text-muted-foreground">
+            <thead className="bg-secondary/50">
+              <tr>
+                {activeColumns.map(key => renderHeader(key))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {[...Array(5)].map((_, i) => (
+                <tr key={i}>
+                  {activeColumns.map((key, j) => (
+                    <td key={j} className="px-4 py-3"><Skeleton className="h-5 w-full" /></td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="w-full bg-card/50 backdrop-blur-md border border-border rounded-xl shadow-xl overflow-hidden glass neon-border">
+    <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
       <div className="overflow-x-auto">
-        <table className="w-full">
-          <thead>
-            <tr className="bg-secondary/30 border-b border-border text-left">
-              <th className="py-4 px-4 font-semibold text-sm text-muted-foreground w-[35%]">Nome</th>
-              <th className="py-4 px-4 font-semibold text-sm text-muted-foreground text-center">Aval.</th>
-              <th className="py-4 px-4 font-semibold text-sm text-muted-foreground text-center">Status</th>
-              <th className="py-4 px-4 font-semibold text-sm text-muted-foreground text-right">Investimento</th>
-              {dataSource === 'HYBRID' && (
-                <th className="py-4 px-4 font-semibold text-sm text-muted-foreground text-right text-blue-500">
-                  Meta Leads
-                </th>
-              )}
-              {dataSource === 'META' && (
-                <th className="py-4 px-4 font-semibold text-sm text-muted-foreground text-right text-blue-500">
-                  {labels.length > 0 ? `Meta ${labels[labels.length - 1]}` : 'Meta Resultado'}
-                </th>
-              )}
-              {(dataSource === 'KOMMO' || dataSource === 'HYBRID') && (
-                <th className="py-4 px-4 font-semibold text-sm text-gray-600 text-right bg-gray-500/10">Leads Fantasmas</th>
-              )}
-              {labels.map((label, index) => (
-                <th key={index} className="py-4 px-4 font-semibold text-sm text-muted-foreground text-right">
-                  {toRoman(index + 1)}
-                </th>
-              ))}
-              <th className="py-4 px-4 font-semibold text-sm text-muted-foreground text-right">Receita</th>
-              {dataSource === 'HYBRID' && (
-                <th className="py-4 px-4 font-semibold text-sm text-muted-foreground text-right">ROAS</th>
-              )}
+        <table className="w-full text-left text-sm text-muted-foreground">
+          <thead className="bg-secondary/50">
+            <tr>
+              {activeColumns.map(key => renderHeader(key))}
             </tr>
           </thead>
           <tbody>
             {data.length === 0 ? (
               <tr>
-                <td colSpan={10} className="py-8 text-center text-muted-foreground">
+                <td colSpan={activeColumns.length} className="py-8 text-center text-muted-foreground">
                   Nenhuma campanha encontrada.
                 </td>
               </tr>
             ) : (
               data.map((campaign) => (
-                <HierarchyRow key={campaign.id} node={campaign} level={0} journeyLabels={labels} dataSource={dataSource} goals={goals} selectedGoalType={selectedGoalType} />
+                <HierarchyRowWrapper
+                  key={campaign.id}
+                  node={campaign}
+                  level={0}
+                  columns={activeColumns}
+                  renderCell={renderCell}
+                  onCopy={handleCopy}
+                  getEvaluation={getEvaluation}
+                />
               ))
             )}
           </tbody>
@@ -281,4 +424,4 @@ export const CampaignHierarchyTable: React.FC<Props> = ({ data, loading, journey
       </div>
     </div>
   );
-};
+}
