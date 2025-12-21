@@ -12,8 +12,12 @@ export async function GET() {
     return new NextResponse("Unauthorized", { status: 401 });
   }
 
+  console.log("Debug Meta Auth Start:");
+  console.log("NEXT_PUBLIC_META_APP_ID:", process.env.NEXT_PUBLIC_META_APP_ID);
+  console.log("META_APP_ID:", process.env.META_APP_ID);
+
   if (!META_APP_ID) {
-    return new NextResponse("Meta App ID not configured", { status: 500 });
+    return new NextResponse(`Meta App ID not configured. Value: ${META_APP_ID}`, { status: 500 });
   }
 
   const state = Math.random().toString(36).substring(7);
