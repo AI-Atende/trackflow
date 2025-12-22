@@ -13,11 +13,15 @@ export async function GET() {
   }
 
   console.log("Debug Meta Auth Start:");
+  console.log("Env Keys:", Object.keys(process.env).join(", "));
   console.log("NEXT_PUBLIC_META_APP_ID:", process.env.NEXT_PUBLIC_META_APP_ID);
   console.log("META_APP_ID:", process.env.META_APP_ID);
 
-  if (!META_APP_ID) {
-    return new NextResponse(`Meta App ID not configured. Value: ${META_APP_ID}`, { status: 500 });
+  // Fallback
+  const effectiveAppId = process.env.NEXT_PUBLIC_META_APP_ID || process.env.META_APP_ID;
+
+  if (!effectiveAppId) {
+    return new NextResponse(`Meta App ID not configured. Value: ${effectiveAppId}`, { status: 500 });
   }
 
   const state = Math.random().toString(36).substring(7);
@@ -25,7 +29,7 @@ export async function GET() {
   cookieStore.set("meta_oauth_state", state, { httpOnly: true, secure: process.env.NODE_ENV === "production" });
 
   const scope = "ads_management,ads_read,read_insights";
-  const url = `https://www.facebook.com/v19.0/dialog/oauth?client_id=${META_APP_ID}&redirect_uri=${REDIRECT_URI}&state=${state}&scope=${scope}`;
+  const url = `https://www.facebook.com/v19.0/dialog/oauth?client_id=${effectiveAppId}&redirect_uri=${REDIRECT_URI}&state=${state}&scope=${scope}`;
 
   return NextResponse.redirect(url);
 }
