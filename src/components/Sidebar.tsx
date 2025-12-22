@@ -1,7 +1,7 @@
 "use client";
 
 import { useSession } from "next-auth/react";
-import { LayoutDashboard, BarChart3, Target, Users, Settings, TrendingUp, X, Share2, UserCircle, ChevronLeft, ChevronRight, LogOut, UserPlus } from "lucide-react";
+import { LayoutDashboard, BarChart3, Target, Users, Settings, TrendingUp, X, Share2, UserCircle, ChevronLeft, ChevronRight, LogOut, UserPlus, HelpCircle } from "lucide-react";
 import { Select } from "@/components/ui/Select";
 import { useState, useEffect } from "react";
 import { usePathname } from "next/navigation";
@@ -48,6 +48,7 @@ export const Sidebar = ({ isOpen, onClose, currentAccount, availableAccounts, on
     { href: "/", label: "Dashboard Geral", icon: BarChart3 },
     { href: "/campaigns", label: "Campanhas", icon: Target },
     { href: "/settings", label: "Configurações", icon: Settings },
+    { href: "/help", label: "Ajuda", icon: HelpCircle },
   ];
 
   const isActive = (path: string) => pathname === path;
