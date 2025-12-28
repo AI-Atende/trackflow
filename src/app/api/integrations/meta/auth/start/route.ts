@@ -4,7 +4,6 @@ import { authOptions } from "@/lib/auth";
 import { cookies } from "next/headers";
 
 const META_APP_ID = process.env.NEXT_PUBLIC_META_APP_ID;
-const REDIRECT_URI = `${process.env.NEXT_PUBLIC_APP_URL}/api/integrations/meta/auth/callback`;
 
 export async function GET() {
   const session = await getServerSession(authOptions);
@@ -12,10 +11,19 @@ export async function GET() {
     return new NextResponse("Unauthorized", { status: 401 });
   }
 
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL;
+  if (!appUrl) {
+    console.error("Meta Auth Error: NEXT_PUBLIC_APP_URL is not defined");
+    return new NextResponse("Server Configuration Error: NEXT_PUBLIC_APP_URL is missing.", { status: 500 });
+  }
+
+  const REDIRECT_URI = `${appUrl}/api/integrations/meta/auth/callback`;
+
   console.log("Debug Meta Auth Start:");
   console.log("Env Keys:", Object.keys(process.env).join(", "));
   console.log("NEXT_PUBLIC_META_APP_ID:", process.env.NEXT_PUBLIC_META_APP_ID);
   console.log("META_APP_ID:", process.env.META_APP_ID);
+  console.log("REDIRECT_URI:", REDIRECT_URI);
 
   // Fallback
   const effectiveAppId = process.env.NEXT_PUBLIC_META_APP_ID || process.env.META_APP_ID;
