@@ -5,15 +5,25 @@ import { cookies } from "next/headers";
 
 const META_APP_ID = process.env.NEXT_PUBLIC_META_APP_ID;
 
-export async function GET() {
+export async function GET(request: Request) {
   const session = await getServerSession(authOptions);
   if (!session) {
     return new NextResponse("Unauthorized", { status: 401 });
   }
 
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL;
+  let appUrl = process.env.NEXT_PUBLIC_APP_URL;
+
+  // Handle "undefined" string or missing value
+  if (!appUrl || appUrl === "undefined") {
+    const host = request.headers.get("host");
+    const proto = request.headers.get("x-forwarded-proto") || "https";
+    if (host) {
+      appUrl = `${proto}://${host}`;
+    }
+  }
+
   if (!appUrl) {
-    console.error("Meta Auth Error: NEXT_PUBLIC_APP_URL is not defined");
+    console.error("Meta Auth Error: NEXT_PUBLIC_APP_URL is not defined and could not be inferred");
     return new NextResponse("Server Configuration Error: NEXT_PUBLIC_APP_URL is missing.", { status: 500 });
   }
 

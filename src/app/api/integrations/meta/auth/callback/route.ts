@@ -6,7 +6,6 @@ import { prisma } from "@/lib/prisma";
 
 const META_APP_ID = process.env.NEXT_PUBLIC_META_APP_ID;
 const META_APP_SECRET = process.env.META_APP_SECRET;
-const REDIRECT_URI = `${process.env.NEXT_PUBLIC_APP_URL}/api/integrations/meta/auth/callback`;
 
 export async function GET(request: Request) {
   const session = await getServerSession(authOptions);
@@ -14,13 +13,31 @@ export async function GET(request: Request) {
     return new NextResponse("Unauthorized", { status: 401 });
   }
 
+  let appUrl = process.env.NEXT_PUBLIC_APP_URL;
+
+  // Handle "undefined" string or missing value
+  if (!appUrl || appUrl === "undefined") {
+    const host = request.headers.get("host");
+    const proto = request.headers.get("x-forwarded-proto") || "https";
+    if (host) {
+      appUrl = `${proto}://${host}`;
+    }
+  }
+
+  if (!appUrl) {
+    console.error("Meta Auth Callback Error: NEXT_PUBLIC_APP_URL is not defined");
+    return new NextResponse("Server Configuration Error: NEXT_PUBLIC_APP_URL is missing.", { status: 500 });
+  }
+
+  const REDIRECT_URI = `${appUrl}/api/integrations/meta/auth/callback`;
+
   const { searchParams } = new URL(request.url);
   const code = searchParams.get("code");
   const state = searchParams.get("state");
   const error = searchParams.get("error");
 
   if (error) {
-    return NextResponse.redirect(`${process.env.NEXT_PUBLIC_APP_URL}/integrations?error=${error}`);
+    return NextResponse.redirect(`${appUrl}/integrations?error=${error}`);
   }
 
   const cookieStore = await cookies();
