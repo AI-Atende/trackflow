@@ -342,13 +342,29 @@ export default function CampaignHierarchyTable({
           )}
         </td>
       );
-      case 'status': return (
-        <td key={key} className="px-4 py-3 text-center">
-          <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${node.status === 'active' ? 'bg-green-500/10 text-green-500' : 'bg-yellow-500/10 text-yellow-500'}`}>
-            {node.status === 'active' ? 'Ativo' : 'Pausado'}
-          </span>
-        </td>
-      );
+      case 'status': {
+        const statusMap: { [key: string]: { label: string; color: string; bg: string } } = {
+          'ACTIVE': { label: 'Ativo', color: 'text-green-500', bg: 'bg-green-500/10' },
+          'PAUSED': { label: 'Pausado', color: 'text-yellow-500', bg: 'bg-yellow-500/10' },
+          'DELETED': { label: 'Excluído', color: 'text-red-500', bg: 'bg-red-500/10' },
+          'ARCHIVED': { label: 'Arquivado', color: 'text-gray-500', bg: 'bg-gray-500/10' },
+          'CAMPAIGN_PAUSED': { label: 'Campanha Pausada', color: 'text-orange-500', bg: 'bg-orange-500/10' },
+          'ADSET_PAUSED': { label: 'Conjunto Pausado', color: 'text-orange-500', bg: 'bg-orange-500/10' },
+          'IN_PROCESS': { label: 'Em Processamento', color: 'text-blue-500', bg: 'bg-blue-500/10' },
+          'WITH_ISSUES': { label: 'Com Erros', color: 'text-red-500', bg: 'bg-red-500/10' },
+        };
+
+        const statusKey = node.status?.toUpperCase() || 'PAUSED';
+        const config = statusMap[statusKey] || { label: 'Pausado', color: 'text-yellow-500', bg: 'bg-yellow-500/10' };
+
+        return (
+          <td key={key} className="px-4 py-3 text-center">
+            <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${config.bg} ${config.color} whitespace-nowrap`}>
+              {config.label}
+            </span>
+          </td>
+        );
+      }
       case 'spend': return <td key={key} className="px-4 py-3 text-right font-mono text-sm text-foreground">{formatCurrency(node.spend || 0)}</td>;
       case 'revenue': return <td key={key} className="px-4 py-3 text-right font-bold text-brand-500">{formatCurrency(node.revenue || 0)}</td>;
       case 'roas': return (
