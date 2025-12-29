@@ -85,18 +85,39 @@ export const MetaConfigModal: React.FC<MetaConfigModalProps> = ({ isOpen, onClos
       checkStatus();
       fetchConfig();
 
-      // Check for action param in URL (from callback)
+      // Check for action param in URL (legacy support or direct access)
       const params = new URLSearchParams(window.location.search);
       if (params.get('action') === 'select_meta_account') {
         fetchAccounts();
         // Clean URL
         window.history.replaceState({}, '', '/integrations');
       }
+
+      // Listen for popup message
+      const handleMessage = (event: MessageEvent) => {
+        if (event.data?.type === 'meta_auth_success') {
+          showToast("Conexão com Facebook realizada!", "success");
+          fetchAccounts();
+        }
+      };
+
+      window.addEventListener('message', handleMessage);
+      return () => window.removeEventListener('message', handleMessage);
     }
   }, [isOpen]);
 
   const handleConnect = () => {
-    window.location.href = '/api/integrations/meta/auth/start';
+    // Open popup
+    const width = 600;
+    const height = 700;
+    const left = window.screen.width / 2 - width / 2;
+    const top = window.screen.height / 2 - height / 2;
+
+    window.open(
+      '/api/integrations/meta/auth/start',
+      'MetaAuth',
+      `width=${width},height=${height},left=${left},top=${top}`
+    );
   };
 
   const handleSelectAccount = async () => {

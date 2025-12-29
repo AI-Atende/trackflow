@@ -109,13 +109,38 @@ export async function GET(request: Request) {
     });
     console.log("Meta Auth Callback: Database updated");
 
-    // 4. Redirect to Integrations page with action to open modal
-    return NextResponse.redirect(`${appUrl}/integrations?action=select_meta_account`);
+    // 4. Return HTML to close popup and notify opener
+    const html = `
+      <html>
+        <body>
+          <script>
+            window.opener.postMessage({ type: 'meta_auth_success' }, '*');
+            window.close();
+          </script>
+          <p>Autenticação realizada com sucesso! Fechando janela...</p>
+        </body>
+      </html>
+    `;
+    return new NextResponse(html, {
+      headers: { 'Content-Type': 'text/html' },
+    });
 
   } catch (error: any) {
     console.error("Meta Auth Critical Error:", error);
-    // Fallback URL if appUrl failed
-    const fallbackUrl = process.env.NEXT_PUBLIC_APP_URL || "https://trackflow.aiatende.dev.br";
-    return NextResponse.redirect(`${fallbackUrl}/integrations?error=auth_failed&details=${encodeURIComponent(error.message || "Unknown error")}`);
+    const errorHtml = `
+      <html>
+        <body>
+          <h3>Erro na Autenticação</h3>
+          <p>${error.message || "Erro desconhecido"}</p>
+          <script>
+            setTimeout(() => window.close(), 5000);
+          </script>
+        </body>
+      </html>
+    `;
+    return new NextResponse(errorHtml, {
+      status: 500,
+      headers: { 'Content-Type': 'text/html' },
+    });
   }
 }
