@@ -28,8 +28,15 @@ export async function POST(request: Request) {
   try {
     // Upsert MetaAdAccount
     // We use the USER token for the account.
-    // NOTE: In a more complex app, we might want to get a System User token or similar,
-    // but for standard integrations, the User Token is fine as long as it's long-lived.
+
+    // 1. Deactivate other accounts for this client to ensure only one is active
+    await prisma.metaAdAccount.updateMany({
+      where: {
+        clientId: session.user.clientId,
+        adAccountId: { not: adAccountId }
+      },
+      data: { status: "INACTIVE" }
+    });
 
     // Check if exists
     const existing = await prisma.metaAdAccount.findFirst({

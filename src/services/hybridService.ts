@@ -53,8 +53,8 @@ export async function fetchHybridData(
   if (!client) return { campaigns: [], labels: [] };
 
   const kommoConfig = client.integrations.find(i => i.provider === 'KOMMO');
-  const metaAccount = client.metaAdAccounts[0]; // Assuming single account for now
-  const googleAccount = client.googleAdAccounts[0]; // Assuming single account for now
+  const metaAccount = client.metaAdAccounts.find(a => a.status === 'ACTIVE'); // Use active account
+  const googleAccount = client.googleAdAccounts.find(a => a.status === 'ACTIVE'); // Use active account
 
   let kommoData: CampaignHierarchy[] = [];
   let metaData: CampaignHierarchy[] = [];

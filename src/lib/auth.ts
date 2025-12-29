@@ -38,7 +38,7 @@ export const authOptions: NextAuthOptions = {
                     throw new Error("Usuário inativo.");
                 }
 
-                const primaryAdAccount = client.metaAdAccounts?.[0];
+                const primaryAdAccount = client.metaAdAccounts?.find(a => a.status === 'ACTIVE') || client.metaAdAccounts?.[0];
 
                 const isProfileComplete = !!(
                     client.phone &&
@@ -106,8 +106,8 @@ export const authOptions: NextAuthOptions = {
                 });
 
                 if (dbUser) {
-                    // Select the first account or handle selection logic later
-                    const primaryMetaAccount = dbUser.metaAdAccounts[0];
+                    // Select the active account
+                    const primaryMetaAccount = dbUser.metaAdAccounts.find(a => a.status === 'ACTIVE') || dbUser.metaAdAccounts[0];
 
                     token.metaAdAccount = primaryMetaAccount ? {
                         id: primaryMetaAccount.id,
