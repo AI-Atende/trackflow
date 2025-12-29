@@ -3,6 +3,8 @@ import { Save, X, RotateCcw, Layers, Facebook } from 'lucide-react';
 import { useToast } from '@/contexts/ToastContext';
 import { Select } from '@/components/ui/Select';
 
+import { useSession } from "next-auth/react";
+
 interface MetaConfigModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -20,6 +22,7 @@ const AVAILABLE_METRICS = [
 
 export const MetaConfigModal: React.FC<MetaConfigModalProps> = ({ isOpen, onClose, onSuccess }) => {
   const { showToast } = useToast();
+  const { update } = useSession();
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
 
@@ -139,6 +142,9 @@ export const MetaConfigModal: React.FC<MetaConfigModalProps> = ({ isOpen, onClos
         setConnectedAccountName(name);
         setAvailableAccounts([]); // Clear selection list
         checkStatus();
+
+        // Refresh session to update active account in context
+        await update();
 
         // Trigger Sync
         showToast("Sincronizando dados recentes...", "success");
@@ -323,6 +329,7 @@ export const MetaConfigModal: React.FC<MetaConfigModalProps> = ({ isOpen, onClos
                                 setIsConnected(false);
                                 setConnectedAccountName(null);
                                 setAvailableAccounts([]);
+                                await update(); // Refresh session
                                 showToast("Desconectado com sucesso.", "success");
                               } catch (e) {
                                 showToast("Erro ao desconectar.", "error");

@@ -31,11 +31,14 @@ export async function POST(
     });
 
     if (!metaAccount) {
+        console.error(`[SYNC] Account not found for user ${session.user.clientId} and adAccount ${adAccountId}`);
         return NextResponse.json(
             { error: "Conta de anúncios não encontrada." },
             { status: 404 }
         );
     }
+
+    console.log(`[SYNC] Found account: ${metaAccount.id}, Status: ${metaAccount.status}, Name: ${metaAccount.name}`);
 
     // Verify access to the owner of the ad account
     const hasAccess = await verifyAccountAccess(session.user.clientId, metaAccount.clientId);
@@ -48,6 +51,7 @@ export async function POST(
     }
 
     if (metaAccount.status.toLowerCase() !== "active") {
+        console.error(`[SYNC] Account status is ${metaAccount.status}, expected active`);
         return NextResponse.json(
             { error: "A conta de anúncios não está ativa." },
             { status: 400 }
