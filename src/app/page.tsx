@@ -7,7 +7,6 @@ import { MetricSummary } from '@/types';
 import { usePersistentState } from '@/hooks/usePersistentState';
 import { Sidebar } from "@/components/Sidebar";
 import { Select } from "@/components/ui/Select";
-import { ViewManager } from "@/components/ViewManager";
 
 import { Header } from "@/components/Header";
 import { useSession, signOut } from 'next-auth/react';
@@ -17,8 +16,9 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { format, subDays } from 'date-fns';
 import { MetricCard } from '@/components/MetricCard';
 import { FunnelChart } from '@/components/FunnelChart';
-import { AiInsights } from '@/components/AiInsights';
-import { TrackingTable } from '@/components/TrackingTable';
+import { EvolutionChart } from '@/components/EvolutionChart';
+import { CampaignRanking } from '@/components/CampaignRanking';
+import { CampaignSidebar } from '@/components/CampaignSidebar';
 
 type DateRange = {
     from: Date;
@@ -43,11 +43,12 @@ const HomeContent = () => {
     const { theme, toggleTheme } = useTheme();
 
     const [campaigns, setCampaigns] = useState<any[]>([]);
-    const [metrics, setMetrics] = useState<any[]>([]);
+    // const [metrics, setMetrics] = useState<any[]>([]); // Derived state now
     const [selectedCampaignId, setSelectedCampaignId] = useState<string | null>(null);
     const [searchTerm, setSearchTerm] = useState('');
     const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+    const [isCampaignSidebarOpen, setIsCampaignSidebarOpen] = useState(false);
     const [isLoadingData, setIsLoadingData] = useState(true);
 
     const [availableAccounts, setAvailableAccounts] = useState<any[]>([]);
@@ -56,6 +57,7 @@ const HomeContent = () => {
     const [journeyLabels, setJourneyLabels] = useState<string[]>([]);
 
     const [integrationConfig, setIntegrationConfig] = useState<{ isActive: boolean, journeyMap: string[] } | null>(null);
+    const [evolutionData, setEvolutionData] = useState<any[]>([]); // New State for Evolution Data
 
 
 
@@ -133,6 +135,20 @@ const HomeContent = () => {
         }
     };
 
+    const fetchEvolutionData = async () => {
+        if (!selectedAccount) return;
+        try {
+            // Always fetch 30 days to allow client-side filtering
+            const res = await fetch(`/api/dashboard/evolution?days=30&dataSource=${dataSource}`);
+            if (res.ok) {
+                const data = await res.json();
+                setEvolutionData(data);
+            }
+        } catch (error) {
+            console.error("Erro ao buscar dados de evolução:", error);
+        }
+    };
+
     const fetchDashboardData = async () => {
         if (!selectedAccount) return;
         setIsLoadingData(true);
@@ -149,62 +165,16 @@ const HomeContent = () => {
                 setCampaigns(campaigns);
                 setJourneyLabels(labels);
 
-                if (campaigns.length > 0 && !selectedCampaignId) {
-                    setSelectedCampaignId(campaigns[0].id);
-                }
+                setCampaigns(campaigns);
+                setJourneyLabels(labels);
 
-                // Calculate Totals
-                const totalSpend = campaigns.reduce((acc: number, c: any) => acc + (c.spend || 0), 0);
-                const totalRevenue = campaigns.reduce((acc: number, c: any) => acc + (c.revenue || 0), 0);
-                const totalROAS = totalSpend > 0 ? totalRevenue / totalSpend : 0;
+                // Auto-select removed to allow "All" view by default
+                // if (campaigns.length > 0 && !selectedCampaignId) {
+                //    setSelectedCampaignId(campaigns[0].id);
+                // }
 
-                const stageTotals = [
-                    campaigns.reduce((acc: number, c: any) => acc + (c.data?.stage1 || 0), 0),
-                    campaigns.reduce((acc: number, c: any) => acc + (c.data?.stage2 || 0), 0),
-                    campaigns.reduce((acc: number, c: any) => acc + (c.data?.stage3 || 0), 0),
-                    campaigns.reduce((acc: number, c: any) => acc + (c.data?.stage4 || 0), 0),
-                    campaigns.reduce((acc: number, c: any) => acc + (c.data?.stage5 || 0), 0),
-                ];
-
-                const baseMetrics: MetricSummary[] = labels.map((label: string, index: number) => {
-                    const value = stageTotals[index];
-                    const firstStageValue = stageTotals[0];
-                    const percentage = firstStageValue > 0 ? (value / firstStageValue) * 100 : 0;
-
-                    return {
-                        label: label || `Etapa ${index + 1}`,
-                        value: value.toLocaleString('pt-BR'),
-                        percentage: index === 0 ? "100%" : `${percentage.toFixed(2)}%`,
-                        trend: "neutral",
-                        icon: ["Eye", "MousePointer", "Users", "Target", "Award"][index] || "Activity"
-                    };
-                });
-
-                baseMetrics.push({
-                    label: "Investimento Total",
-                    value: `R$ ${totalSpend.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`,
-                    percentage: "",
-                    trend: "neutral",
-                    icon: "DollarSign"
-                });
-
-                baseMetrics.push({
-                    label: "Receita Total",
-                    value: `R$ ${totalRevenue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`,
-                    percentage: "",
-                    trend: "neutral",
-                    icon: "DollarSign"
-                });
-
-                baseMetrics.push({
-                    label: "ROAS Geral",
-                    value: `${totalROAS.toFixed(2)}x`,
-                    percentage: "",
-                    trend: "neutral",
-                    icon: "TrendingUp"
-                });
-
-                setMetrics(baseMetrics);
+                // Metrics now derived in useMemo
+                // setMetrics(baseMetrics);
 
                 // Update integration config for journey map usage in other components
                 setIntegrationConfig({ isActive: true, journeyMap: labels });
@@ -225,6 +195,7 @@ const HomeContent = () => {
     useEffect(() => {
         if (status === "authenticated" && selectedAccount) {
             fetchDashboardData();
+            fetchEvolutionData();
         }
     }, [status, session, selectedAccount, dateRange, dataSource]);
 
@@ -267,6 +238,81 @@ const HomeContent = () => {
     // Keeping only the account fetching logic above
 
 
+
+    // Derived Metrics Calculation
+    const metrics = React.useMemo(() => {
+        if (!campaigns.length || !journeyLabels.length) return [];
+
+        // Determine which campaigns to aggregate
+        let targetData = campaigns;
+        if (selectedCampaignId) {
+            const selected = campaigns.find(c => c.id === selectedCampaignId);
+            if (selected) {
+                targetData = [selected];
+            } else {
+                // If not found in top level, try to find in children (recursive if needed, but 1 level deep is standard for adsets)
+                // For now, if we can't find it, we fallback to all or empty? 
+                // Let's fallback to all to avoid broken state, or maybe filter children.
+                // Assuming flat list or top-level id for now.
+                // Note: If TrackingTable filters hierarchy, selectedID might be a child.
+                // Let's try to find it in 2nd level.
+                const childCamp = campaigns.flatMap(c => c.children || []).find(c => c.id === selectedCampaignId);
+                if (childCamp) targetData = [childCamp];
+            }
+        }
+
+        const totalSpend = targetData.reduce((acc: number, c: any) => acc + (c.spend || 0), 0);
+        const totalRevenue = targetData.reduce((acc: number, c: any) => acc + (c.revenue || 0), 0);
+        const totalROAS = totalSpend > 0 ? totalRevenue / totalSpend : 0;
+
+        const stageTotals = [
+            targetData.reduce((acc: number, c: any) => acc + (c.data?.stage1 || 0), 0),
+            targetData.reduce((acc: number, c: any) => acc + (c.data?.stage2 || 0), 0),
+            targetData.reduce((acc: number, c: any) => acc + (c.data?.stage3 || 0), 0),
+            targetData.reduce((acc: number, c: any) => acc + (c.data?.stage4 || 0), 0),
+            targetData.reduce((acc: number, c: any) => acc + (c.data?.stage5 || 0), 0),
+        ];
+
+        const baseMetrics: MetricSummary[] = journeyLabels.map((label: string, index: number) => {
+            const value = stageTotals[index];
+            const firstStageValue = stageTotals[0];
+            const percentage = firstStageValue > 0 ? (value / firstStageValue) * 100 : 0;
+
+            return {
+                label: label || `Etapa ${index + 1}`,
+                value: value.toLocaleString('pt-BR'),
+                percentage: index === 0 ? "100%" : `${percentage.toFixed(2)}%`,
+                trend: "neutral",
+                icon: ["Eye", "MousePointer", "Users", "Target", "Award"][index] || "Activity"
+            };
+        });
+
+        baseMetrics.push({
+            label: "Investimento Total",
+            value: `R$ ${totalSpend.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`,
+            percentage: "",
+            trend: "neutral",
+            icon: "DollarSign"
+        });
+
+        baseMetrics.push({
+            label: "Receita Total",
+            value: `R$ ${totalRevenue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`,
+            percentage: "",
+            trend: "neutral",
+            icon: "DollarSign"
+        });
+
+        baseMetrics.push({
+            label: "ROAS Geral",
+            value: `${totalROAS.toFixed(2)}x`,
+            percentage: "",
+            trend: "neutral",
+            icon: "TrendingUp"
+        });
+
+        return baseMetrics;
+    }, [campaigns, selectedCampaignId, journeyLabels]);
 
 
 
@@ -318,14 +364,17 @@ const HomeContent = () => {
 
                 {/* Scrollable Content */}
                 <div className="flex-1 overflow-y-auto p-6 md:p-8 space-y-8 bg-background">
+                    {/* Strategic Dashboard Layout */}
+
+                    {/* 1. KPI Cards Row */}
                     <section className="space-y-6">
                         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                             <div>
-                                <h1 className="text-2xl font-bold text-foreground tracking-tight">Dashboard</h1>
-                                <p className="text-sm text-muted-foreground">Visão geral do desempenho das suas campanhas.</p>
+                                <h1 className="text-2xl font-bold text-foreground tracking-tight">Dashboard Geral</h1>
+                                <p className="text-sm text-muted-foreground">Visão estratégica e saúde do negócio.</p>
                             </div>
 
-                            {/* Data Source Selector - Hero Position */}
+                            {/* Data Source Selector */}
                             <div className="w-48">
                                 <Select
                                     options={availableDataSources.map(ds => {
@@ -351,7 +400,7 @@ const HomeContent = () => {
                         </div>
 
                         {/* Metrics Grid */}
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                             {isLoadingData ? (
                                 [...Array(4)].map((_, i) => (
                                     <MetricCard key={i} metric={{ label: '', value: '', percentage: '', trend: 'neutral' }} loading={true} />
@@ -369,147 +418,42 @@ const HomeContent = () => {
                         </div>
                     </section>
 
-                    {/* Middle Section: Chart & AI */}
-                    <section className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                        <div className="lg:col-span-2 min-w-0">
-                            <FunnelChart
-                                data={filteredCampaigns}
-                                selectedId={selectedCampaignId}
-                                journeyLabels={integrationConfig?.journeyMap}
-                                loading={isLoadingData}
-                            />
-                        </div>
+
+                    {/* 2. Performance & Insights Row */}
+                    <section className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                        {/* Ranking takes 1/3 but is full width on mobile */}
                         <div className="lg:col-span-1 min-w-0">
-                            <AiInsights campaigns={filteredCampaigns} loading={isLoadingData} />
+                            <CampaignRanking campaigns={campaigns} loading={isLoadingData} />
                         </div>
-                    </section>
 
-
-
-
-
-                    {/* Main Table */}
-                    <section>
-                        <div className="flex flex-col md:flex-row md:items-center justify-between mb-4 gap-4">
-                            <div className="flex items-center gap-4">
-                                <h2 className="text-lg font-bold text-foreground">Rastreamento de Campanhas</h2>
-
-                                {/* Goal Selector for Evaluation */}
-                                <div className="flex items-center gap-2">
-                                    <span className="text-sm text-muted-foreground">Avaliar por:</span>
-                                    <div className="w-32">
-                                        <Select
-                                            options={[
-                                                { value: 'ROAS', label: 'ROAS' },
-                                                { value: 'REVENUE', label: 'Receita' },
-                                                ...(integrationConfig?.journeyMap || []).map((stage, index) => ({
-                                                    value: `CPA_${index}`,
-                                                    label: `CPA - ${stage}`
-                                                }))
-                                            ]}
-                                            value={selectedGoalType}
-                                            onChange={(val) => setSelectedGoalType(val as any)}
-                                            placeholder="Meta"
-                                        />
-                                    </div>
-                                </div>
-
-                                {/* View Manager */}
-                                <ViewManager
-                                    dataSource={dataSource}
-                                    availableColumns={[
-                                        { key: 'name', label: 'Campanha' },
-                                        { key: 'evaluation', label: 'Avaliação' },
-                                        { key: 'status', label: 'Status' },
-                                        { key: 'spend', label: 'Investimento' },
-                                        { key: 'revenue', label: 'Receita' },
-                                        { key: 'roas', label: 'ROAS' },
-                                        { key: 'results', label: 'Resultados' },
-                                        ...(dataSource !== 'META' ? [{ key: 'ghostLeads', label: 'Leads Fantasmas' }] : []),
-                                        ...((integrationConfig?.journeyMap || ['Etapa 1', 'Etapa 2', 'Etapa 3', 'Etapa 4', 'Etapa 5']).map((label, i) => ({
-                                            key: `stage${i + 1}`,
-                                            label: label
-                                        })))
-                                    ]}
-                                    currentColumns={currentColumns}
-                                    onColumnsChange={setCurrentColumns}
-                                />
-                            </div>
-
-                            <div className="flex gap-2 flex-wrap justify-end">
-                                {/* Legenda dinâmica */}
-                                {(journeyLabels || []).map((label, idx) => (
-                                    <div
-                                        key={idx}
-                                        className={`hidden md:flex items-center px-3 py-1 rounded-lg border ${idx === 0 ? "bg-blue-500/10 text-blue-500 border-blue-500/20" :
-                                            idx === 1 ? "bg-cyan-500/10 text-cyan-500 border-cyan-500/20" :
-                                                idx === 2 ? "bg-yellow-500/10 text-yellow-500 border-yellow-500/20" :
-                                                    idx === 3 ? "bg-orange-500/10 text-orange-500 border-orange-500/20" :
-                                                        "bg-red-500/10 text-red-500 border-red-500/20"
-                                            }`}
-                                    >
-                                        <span className="text-xs font-bold mr-2 opacity-75">{['I', 'II', 'III', 'IV', 'V'][idx]}</span>
-                                        <span className="text-xs font-semibold whitespace-nowrap">{label}</span>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                        {dataSource?.includes('HYBRID') ? (
-                            <>
-                                <div className="mb-8">
-                                    <h3 className="text-md font-semibold text-muted-foreground mb-2">Campanhas Integradas</h3>
-                                    <TrackingTable
-                                        data={filteredCampaigns.filter(c => !c.isOrphan)}
-                                        onSelect={setSelectedCampaignId}
-                                        selectedId={selectedCampaignId}
-                                        journeyLabels={journeyLabels}
-                                        dataSource={dataSource as any}
-                                        loading={isLoadingData}
-                                        goals={goals}
-                                        selectedGoalType={selectedGoalType}
-                                        columns={currentColumns}
-                                        onColumnsReorder={setCurrentColumns}
-                                        metaResultLabel={journeyLabels[journeyLabels.length - 1]}
-                                    />
-                                </div>
-
-                                {filteredCampaigns.some(c => c.isOrphan) && (
-                                    <div>
-                                        <h3 className="text-md font-semibold text-muted-foreground mb-2">Campanhas Adicionais (Não Integradas)</h3>
-                                        <TrackingTable
-                                            data={filteredCampaigns.filter(c => c.isOrphan)}
-                                            onSelect={setSelectedCampaignId}
-                                            selectedId={selectedCampaignId}
-                                            journeyLabels={undefined}
-                                            dataSource={dataSource.includes('GOOGLE') ? 'GOOGLE' : 'META'} // Simplify fallback
-                                            loading={isLoadingData}
-                                            goals={goals}
-                                            selectedGoalType={selectedGoalType}
-                                            columns={currentColumns}
-                                            onColumnsReorder={setCurrentColumns}
-                                            metaResultLabel={journeyLabels[journeyLabels.length - 1]}
-                                        />
-                                    </div>
-                                )}
-                            </>
-                        ) : (
-                            <TrackingTable
-                                data={filteredCampaigns}
-                                onSelect={setSelectedCampaignId}
-                                selectedId={selectedCampaignId}
-                                journeyLabels={journeyLabels}
-                                dataSource={dataSource as any}
+                        {/* Evolution takes 2/3 */}
+                        <div className="lg:col-span-2 min-w-0 h-[400px]">
+                            <EvolutionChart
+                                data={evolutionData}
                                 loading={isLoadingData}
-                                goals={goals}
-                                selectedGoalType={selectedGoalType}
-                                columns={currentColumns}
-                                onColumnsReorder={setCurrentColumns}
-                                metaResultLabel={journeyLabels[journeyLabels.length - 1]}
                             />
-                        )}
+                        </div>
                     </section>
 
+                    {/* 3. Operational Analysis Row */}
+                    <section className="w-full h-[400px]">
+                        <FunnelChart
+                            data={filteredCampaigns}
+                            selectedId={selectedCampaignId}
+                            journeyLabels={integrationConfig?.journeyMap}
+                            loading={isLoadingData}
+                        />
+                    </section>
                 </div>
+
+                {/* Floating Campaign Sidebar */}
+                <CampaignSidebar
+                    campaigns={campaigns}
+                    selectedId={selectedCampaignId}
+                    onSelect={setSelectedCampaignId}
+                    isOpen={isCampaignSidebarOpen}
+                    setIsOpen={setIsCampaignSidebarOpen}
+                />
             </main >
         </div >
     );

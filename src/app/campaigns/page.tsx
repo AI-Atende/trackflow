@@ -12,6 +12,7 @@ import { CampaignHierarchy } from '@/types';
 import { Sidebar } from "@/components/Sidebar";
 import { Select } from "@/components/ui/Select";
 import CampaignHierarchyTable from "@/components/CampaignHierarchyTable";
+import { AiInsights } from "@/components/AiInsights";
 import { ViewManager } from "@/components/ViewManager";
 import { Header } from "@/components/Header";
 import { usePersistentState } from '@/hooks/usePersistentState';
@@ -319,6 +320,10 @@ const CampaignsContent = () => {
               })()}
             </div>
           </div >
+
+          <div className="mb-8">
+            <AiInsights campaigns={filteredCampaigns} loading={isLoading} />
+          </div>
 
           {
             dataSource === 'HYBRID' ? (

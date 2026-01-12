@@ -34,6 +34,7 @@ interface TrackingTableProps {
   columns?: string[]; // Array of column keys
   onColumnsReorder?: (columns: string[]) => void;
   metaResultLabel?: string;
+  compact?: boolean;
 }
 
 export const TrackingTable: React.FC<TrackingTableProps> = ({
@@ -47,13 +48,16 @@ export const TrackingTable: React.FC<TrackingTableProps> = ({
   selectedGoalType = 'ROAS',
   columns,
   onColumnsReorder,
-  metaResultLabel
+  metaResultLabel,
+  compact = false
 }) => {
   const labels = journeyLabels || ["Impressões", "Cliques", "Leads", "Checkout", "Vendas"];
   const { showToast } = useToast();
 
   // Default columns if not provided
-  const activeColumns = columns || ['name', 'evaluation', 'status', 'spend', 'stage1', 'stage2', 'stage3', 'stage4', 'stage5', 'revenue', 'roas', 'results'];
+  const activeColumns = columns || (compact
+    ? ['name', 'status', 'roas', 'results']
+    : ['name', 'evaluation', 'status', 'spend', 'stage1', 'stage2', 'stage3', 'stage4', 'stage5', 'revenue', 'roas', 'results']);
 
   const handleCopy = (e: React.MouseEvent, text: string) => {
     e.stopPropagation();
@@ -185,7 +189,7 @@ export const TrackingTable: React.FC<TrackingTableProps> = ({
         onDragStart={(e) => handleDragStart(e, key)}
         onDragOver={handleDragOver}
         onDrop={(e) => handleDrop(e, key)}
-        className={`px-4 py-3 text-center text-xs font-semibold uppercase tracking-wider text-muted-foreground cursor-move hover:bg-secondary/50 transition-colors ${key === 'name' ? 'text-left min-w-[300px]' : (key === 'spend' || key === 'revenue' || key === 'roas' ? 'text-right' : '')} ${key === 'results' ? 'text-blue-500' : ''} ${key === 'ghostLeads' ? 'text-gray-500' : ''}`}
+        className={`${compact ? 'px-2 py-2' : 'px-4 py-3'} text-center text-xs font-semibold uppercase tracking-wider text-muted-foreground cursor-move hover:bg-secondary/50 transition-colors ${key === 'name' ? 'text-left min-w-[200px]' : (key === 'spend' || key === 'revenue' || key === 'roas' ? 'text-right' : '')} ${key === 'results' ? 'text-blue-500' : ''} ${key === 'ghostLeads' ? 'text-gray-500' : ''}`}
       >
         {content}
       </th>
@@ -203,7 +207,7 @@ export const TrackingTable: React.FC<TrackingTableProps> = ({
       const label = labels[index] || toRoman(index + 1);
 
       return (
-        <td key={key} className="px-4 py-3 text-center">
+        <td key={key} className={`${compact ? 'px-2 py-2' : 'px-4 py-3'} text-center`}>
           <Tooltip content={
             <div className="text-center">
               <p className="font-bold">{label}</p>
@@ -220,9 +224,9 @@ export const TrackingTable: React.FC<TrackingTableProps> = ({
 
     switch (key) {
       case 'name': return (
-        <td key={key} className="px-4 py-3 font-medium text-foreground">
+        <td key={key} className={`${compact ? 'px-2 py-2' : 'px-4 py-3'} font-medium text-foreground`}>
           <span
-            className="cursor-pointer hover:text-brand-500 transition-colors block truncate max-w-[300px]"
+            className="cursor-pointer hover:text-brand-500 transition-colors block truncate max-w-[200px]"
             onClick={(e) => { e.stopPropagation(); handleCopy(e, campaign.name); }}
             title={campaign.name}
           >
@@ -231,7 +235,7 @@ export const TrackingTable: React.FC<TrackingTableProps> = ({
         </td>
       );
       case 'evaluation': return (
-        <td key={key} className="px-4 py-3 text-center text-lg">
+        <td key={key} className={`${compact ? 'px-2 py-2' : 'px-4 py-3'} text-center text-lg`}>
           {campaign.isOrphan ? (
             <span className="text-muted-foreground">-</span>
           ) : (
@@ -242,16 +246,16 @@ export const TrackingTable: React.FC<TrackingTableProps> = ({
         </td>
       );
       case 'status': return (
-        <td key={key} className="px-4 py-3 text-center">
+        <td key={key} className={`${compact ? 'px-2 py-2' : 'px-4 py-3'} text-center`}>
           <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${campaign.status === 'active' ? 'bg-green-500/10 text-green-500' : 'bg-yellow-500/10 text-yellow-500'}`}>
             {campaign.status === 'active' ? 'Ativo' : 'Pausado'}
           </span>
         </td>
       );
-      case 'spend': return <td key={key} className="px-4 py-3 text-right font-mono text-sm text-foreground">{formatCurrency(campaign.spend || 0)}</td>;
-      case 'revenue': return <td key={key} className="px-4 py-3 text-right font-bold text-brand-500">{formatCurrency(campaign.revenue || 0)}</td>;
+      case 'spend': return <td key={key} className={`${compact ? 'px-2 py-2' : 'px-4 py-3'} text-right font-mono text-sm text-foreground`}>{formatCurrency(campaign.spend || 0)}</td>;
+      case 'revenue': return <td key={key} className={`${compact ? 'px-2 py-2' : 'px-4 py-3'} text-right font-bold text-brand-500`}>{formatCurrency(campaign.revenue || 0)}</td>;
       case 'roas': return (
-        <td key={key} className="px-4 py-3 text-right">
+        <td key={key} className={`${compact ? 'px-2 py-2' : 'px-4 py-3'} text-right`}>
           {dataSource?.includes('HYBRID') ? (
             <span className={`px-2 py-1 rounded-full text-xs font-bold ${evaluation.color} ${evaluation.bg}`}>
               {(campaign.spend && campaign.spend > 0 ? (campaign.revenue || 0) / campaign.spend : 0).toFixed(2)}x
@@ -262,12 +266,12 @@ export const TrackingTable: React.FC<TrackingTableProps> = ({
         </td>
       );
       case 'ghostLeads': return (
-        <td key={key} className="px-4 py-3 text-center text-gray-600 font-bold bg-gray-500/10">
+        <td key={key} className={`${compact ? 'px-2 py-2' : 'px-4 py-3'} text-center text-gray-600 font-bold bg-gray-500/10`}>
           {formatNumber(campaign.ghostLeads || 0)}
         </td>
       );
       case 'results': return (
-        <td key={key} className="px-4 py-3 text-center font-bold text-blue-600 dark:text-blue-400">
+        <td key={key} className={`${compact ? 'px-2 py-2' : 'px-4 py-3'} text-center font-bold text-blue-600 dark:text-blue-400`}>
           {formatNumber(campaign.metaLeads || campaign.data.stage5 || 0)}
         </td>
       );
@@ -331,7 +335,7 @@ export const TrackingTable: React.FC<TrackingTableProps> = ({
                     onClick={() => onSelect(campaign.id)}
                   >
                     {activeColumns.map(key => renderCell(campaign, key))}
-                    <td className="px-4 py-3 text-right">
+                    <td className={`${compact ? 'px-2 py-2' : 'px-4 py-3'} text-right`}>
                       <button className={`p-1 rounded-full hover:bg-brand-500/20 text-muted-foreground hover:text-brand-500 transition-all ${isSelected ? 'text-brand-500 bg-brand-500/20' : ''}`}>
                         <ChevronRight size={18} />
                       </button>
