@@ -22,10 +22,28 @@ interface KommoResponse {
 }
 
 async function fetchWithRetry(url: string, options: RequestInit, retries = 3, backoff = 1000): Promise<Response> {
+  const requestId = Math.random().toString(36).substring(7);
   try {
     const res = await fetch(url, options);
+    let errorBody = "";
+
     if (!res.ok) {
-      if (retries > 0) {
+      try {
+        errorBody = await res.text();
+      } catch (e) {
+        errorBody = "Could not read error body";
+      }
+
+      console.error(`[KommoReq:${requestId}] Error ${res.status}: ${res.statusText} at ${url}. Body: ${errorBody.substring(0, 500)}`);
+
+      // Detect 401 in body even if status is 500
+      const isUnauthorized = res.status === 401 || errorBody.includes("401") || errorBody.toLowerCase().includes("unauthorized");
+
+      if (isUnauthorized) {
+        throw new Error(`KOMMO_AUTH_ERROR: Falha de autenticação no Kommo para este subdomínio. Reautorize a integração.`);
+      }
+
+      if (retries > 0 && (res.status === 500 || res.status === 502 || res.status === 503 || res.status === 504 || res.status === 429)) {
         await new Promise(resolve => setTimeout(resolve, backoff));
         return fetchWithRetry(url, options, retries - 1, backoff * 2);
       }
@@ -33,7 +51,13 @@ async function fetchWithRetry(url: string, options: RequestInit, retries = 3, ba
     }
     return res;
   } catch (error) {
+    // Re-throw if it's already our specialized auth error
+    if (error instanceof Error && error.message.includes("KOMMO_AUTH_ERROR")) {
+      throw error;
+    }
+
     if (retries > 0) {
+      console.warn(`[KommoReq:${requestId}] Retry attempt ${4 - retries} due to error: ${error instanceof Error ? error.message : 'Unknown'}`);
       await new Promise(resolve => setTimeout(resolve, backoff));
       return fetchWithRetry(url, options, retries - 1, backoff * 2);
     }
@@ -64,10 +88,7 @@ export async function fetchKommoData(
   }
 
   const res = await fetchWithRetry(url.toString(), {
-    method: "GET",
-    headers: {
-      "Content-Type": "application/json",
-    },
+    method: "GET"
   });
 
   const data: KommoResponse = await res.json();
@@ -164,8 +185,7 @@ export async function fetchKommoHierarchy(
   }
 
   const res = await fetchWithRetry(url.toString(), {
-    method: "GET",
-    headers: { "Content-Type": "application/json" },
+    method: "GET"
   });
 
   const data: KommoResponse = await res.json();

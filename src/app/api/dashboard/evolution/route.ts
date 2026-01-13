@@ -65,7 +65,8 @@ export async function GET(request: Request) {
 
         // 2. Fetch Kommo Data (Iterative)
         // Only if dataSource includes KOMMO or HYBRID
-        let kommoDailyMap: Record<string, { leads: number, revenue: number, sales: number }> = {};
+        let kommoDailyMap: Record<string, { stages: Record<string, number>, revenue: number }> = {};
+        let activeJourneyMap: string[] = [];
 
         if (dataSource.includes('KOMMO') || dataSource.includes('HYBRID')) {
             const config = await prisma.integrationConfig.findFirst({
@@ -74,42 +75,51 @@ export async function GET(request: Request) {
 
             if (config && config.config) {
                 const { subdomain } = config.config as any;
-                const journeyMap = (config.journeyMap as string[]) || [];
+                activeJourneyMap = (config.journeyMap as string[]) || ["Leads", "Vendas"];
 
-                // Limit concurrency to avoid rate limits
                 const fetchDay = async (date: Date) => {
-                    // We need exact start/end of day logic
                     const from = startOfDay(date);
                     const to = endOfDay(date);
+                    const isoStr = format(date, 'yyyy-MM-dd');
 
                     try {
-                        const campaigns = await fetchKommoData(subdomain, journeyMap, { from, to });
+                        const campaigns = await fetchKommoData(subdomain, activeJourneyMap, { from, to });
 
-                        // Aggregate
-                        let totalLeads = 0;
+                        // Aggregate by journey map index
+                        let stageTotals: Record<string, number> = {};
+                        activeJourneyMap.forEach(name => stageTotals[name] = 0);
+
                         let totalRevenue = 0;
-                        let totalSales = 0;
 
                         campaigns.forEach(c => {
-                            totalLeads += c.data.stage1 || 0; // Assuming stage1 is Lead
+                            activeJourneyMap.forEach((name, idx) => {
+                                const stageKey = `stage${idx + 1}` as keyof typeof c.data;
+                                stageTotals[name] += (c.data[stageKey] || 0) as number;
+                            });
                             totalRevenue += c.revenue || 0;
-                            totalSales += c.data.stage5 || 0; // Assuming stage5 is Sale
                         });
 
                         return {
-                            dateStr: format(date, 'yyyy-MM-dd'),
-                            leads: totalLeads,
-                            revenue: totalRevenue,
-                            sales: totalSales
+                            dateStr: isoStr,
+                            stages: stageTotals,
+                            revenue: totalRevenue
                         };
-                    } catch (e) {
-                        console.error(`Error fetching Kommo for ${date}:`, e);
-                        return { dateStr: format(date, 'yyyy-MM-dd'), leads: 0, revenue: 0, sales: 0 };
+                    } catch (e: any) {
+                        const isAuthError = e.message?.includes("KOMMO_AUTH_ERROR");
+                        if (isAuthError) {
+                            console.error(`[KOMMO AUTH FAIL] ${isoStr}: Token expirado ou inválido.`);
+                        } else {
+                            console.error(`Error fetching Kommo for ${date}:`, e);
+                        }
+
+                        let emptyStages: Record<string, number> = {};
+                        activeJourneyMap.forEach(name => emptyStages[name] = 0);
+
+                        return { dateStr: isoStr, stages: emptyStages, revenue: 0 };
                     }
                 };
 
-                // Run in batches of 5
-                const batchSize = 5;
+                const batchSize = 2;
                 const results = [];
                 for (let i = 0; i < dates.length; i += batchSize) {
                     const batch = dates.slice(i, i + batchSize);
@@ -118,7 +128,10 @@ export async function GET(request: Request) {
                 }
 
                 results.forEach(r => {
-                    kommoDailyMap[r.dateStr] = { leads: r.leads || 0, revenue: r.revenue || 0, sales: r.sales || 0 };
+                    kommoDailyMap[r.dateStr] = {
+                        stages: r.stages,
+                        revenue: r.revenue || 0
+                    };
                 });
             }
         }
@@ -128,33 +141,47 @@ export async function GET(request: Request) {
             const dateStr = d.iso;
             const dayMeta = metaDaily.find(m => format(m.date, 'yyyy-MM-dd') === dateStr);
             const dayGoogle = googleDaily.find(g => format(g.date, 'yyyy-MM-dd') === dateStr);
-            const dayKommo = kommoDailyMap[dateStr] || { leads: 0, revenue: 0, sales: 0 };
+
+            let emptyStages: Record<string, number> = {};
+            activeJourneyMap.forEach(name => emptyStages[name] = 0);
+
+            const dayKommo = kommoDailyMap[dateStr] || { stages: emptyStages, revenue: 0 };
 
             const totalSpend = (dayMeta?._sum.spend || 0) + (dayGoogle?._sum.cost || 0);
-            const metaLeads = (dayMeta?._sum.leads || 0); // Pixel leads
+            const metaLeads = (dayMeta?._sum.leads || 0);
 
-            // Priority: Kommo Leads > Meta Leads (if Kommo active)
-            // Actually user wants "Real Data", so Kommo is source of truth for Leads/Sales if available
-            const hasKommo = dataSource.includes('KOMMO') || dataSource.includes('HYBRID');
-
-            const finalLeads = hasKommo ? dayKommo.leads : metaLeads;
-            const finalRevenue = hasKommo ? dayKommo.revenue : 0; // Pixel revenue not trusted?
-
-            // Calculate ROAS
+            const hasKommo = (dataSource.includes('KOMMO') || dataSource.includes('HYBRID')) && activeJourneyMap.length > 0;
+            const finalRevenue = hasKommo ? dayKommo.revenue : 0;
             const roas = totalSpend > 0 ? finalRevenue / totalSpend : 0;
 
-            return {
+            // Base object
+            const result: any = {
                 date: d.label,
-                leads: finalLeads,
                 revenue: finalRevenue,
-                receive: finalRevenue, // Mapping to chart expectation
+                receive: finalRevenue,
                 spend: totalSpend,
                 roas: roas,
-                sales: dayKommo.sales
             };
+
+            // Add dynamic stages
+            activeJourneyMap.forEach((name, idx) => {
+                let value = dayKommo.stages[name] || 0;
+
+                // Fallback for Leads if Kommo is not present but Meta is
+                if (idx === 0 && !hasKommo) {
+                    value = metaLeads;
+                }
+
+                result[name] = value;
+            });
+
+            return result;
         });
 
-        return NextResponse.json(evolutionData);
+        return NextResponse.json({
+            data: evolutionData,
+            journeyMap: activeJourneyMap
+        });
 
     } catch (error: any) {
         console.error("Evolution Data Error:", error);

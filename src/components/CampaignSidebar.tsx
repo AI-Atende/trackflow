@@ -32,9 +32,9 @@ export const CampaignSidebar: React.FC<CampaignSidebarProps> = ({
                 title="Filtrar Campanhas"
                 style={{ transition: 'transform 0.3s ease-in-out' }}
             >
-                <div className="flex flex-col items-center gap-2 text-muted-foreground p-1">
-                    {isOpen ? <ChevronRight size={20} /> : <ChevronLeft size={20} />}
-                    <span className="text-[10px] font-bold uppercase tracking-wider -rotate-90 mt-2">Filtros</span>
+                <div className="flex flex-col items-center mt-2 gap-2 text-muted-foreground p-1">
+                    {isOpen ? <ChevronRight size={24} /> : <ChevronLeft size={24} />}
+                    <span className="font-bold uppercase -rotate-90 mt-2"></span>
                 </div>
             </button>
 

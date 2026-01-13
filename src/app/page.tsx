@@ -287,6 +287,18 @@ const HomeContent = () => {
             };
         });
 
+        // Add Ticket Médio per Sale (Revenue / Last Stage)
+        const salesCount = stageTotals[journeyLabels.length - 1] || 0;
+        const ticketMedio = salesCount > 0 ? totalRevenue / salesCount : 0;
+
+        baseMetrics.push({
+            label: "Ticket Médio / Venda",
+            value: `R$ ${ticketMedio.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`,
+            percentage: "",
+            trend: "neutral",
+            icon: "TrendingUp"
+        });
+
         baseMetrics.push({
             label: "Investimento Total",
             value: `R$ ${totalSpend.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`,
@@ -313,6 +325,21 @@ const HomeContent = () => {
 
         return baseMetrics;
     }, [campaigns, selectedCampaignId, journeyLabels]);
+
+    const displayCampaignName = React.useMemo(() => {
+        if (!selectedCampaignId) return "Todas as Campanhas";
+        const findInCampaigns = (camps: any[]): string | null => {
+            for (const c of camps) {
+                if (c.id === selectedCampaignId) return c.name;
+                if (c.children) {
+                    const found = findInCampaigns(c.children);
+                    if (found) return found;
+                }
+            }
+            return null;
+        };
+        return findInCampaigns(campaigns) || "Todas as Campanhas";
+    }, [campaigns, selectedCampaignId]);
 
 
 
@@ -366,11 +393,18 @@ const HomeContent = () => {
                 <div className="flex-1 overflow-y-auto p-6 md:p-8 space-y-8 bg-background">
                     {/* Strategic Dashboard Layout */}
 
-                    {/* 1. KPI Cards Row */}
+                    {/* 1. Dashboard Overview Section */}
                     <section className="space-y-6">
+                        {/* Global Section Header */}
                         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                            <div>
-                                <h1 className="text-2xl font-bold text-foreground tracking-tight">Dashboard Geral</h1>
+                            <div className="flex flex-col gap-1">
+                                <div className="flex items-center gap-3">
+                                    <h1 className="text-2xl font-bold text-foreground tracking-tight whitespace-nowrap">Dashboard Geral</h1>
+                                    <div className="h-6 w-1 bg-brand-500 rounded-full shrink-0" />
+                                    <h2 className="text-xl font-bold text-foreground tracking-tight truncate max-w-[200px] md:max-w-[400px]" title={displayCampaignName}>
+                                        {displayCampaignName}
+                                    </h2>
+                                </div>
                                 <p className="text-sm text-muted-foreground">Visão estratégica e saúde do negócio.</p>
                             </div>
 
@@ -399,51 +433,61 @@ const HomeContent = () => {
                             </div>
                         </div>
 
-                        {/* Metrics Grid */}
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                            {isLoadingData ? (
-                                [...Array(4)].map((_, i) => (
-                                    <MetricCard key={i} metric={{ label: '', value: '', percentage: '', trend: 'neutral' }} loading={true} />
-                                ))
-                            ) : (
-                                metrics.map((metric, index) => (
-                                    <MetricCard key={index} metric={metric} />
-                                ))
-                            )}
-                            {metrics.length === 0 && !isLoadingData && (
-                                <div className="col-span-4 text-center py-8 text-muted-foreground">
-                                    Nenhuma métrica disponível. Vincule uma conta de anúncios e sincronize os dados.
+                        {/* Content Grid (Metrics + Ranking) */}
+                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-stretch">
+                            {/* KPI Cards Section (2/3 width) */}
+                            <div className="lg:col-span-2 space-y-4">
+
+
+                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                                    {isLoadingData ? (
+                                        [...Array(3)].map((_, i) => (
+                                            <MetricCard key={i} metric={{ label: '', value: '', percentage: '', trend: 'neutral' }} loading={true} />
+                                        ))
+                                    ) : (
+                                        metrics.map((metric, index) => (
+                                            <MetricCard key={index} metric={metric} />
+                                        ))
+                                    )}
+                                    {metrics.length === 0 && !isLoadingData && (
+                                        <div className="col-span-3 text-center py-8 text-muted-foreground">
+                                            Nenhuma métrica disponível. Vincule uma conta de anúncios e sincronize os dados.
+                                        </div>
+                                    )}
                                 </div>
-                            )}
+                            </div>
+
+                            {/* Performance Ranking (1/3 width) */}
+                            <div className="lg:col-span-1 min-w-0 h-full">
+                                <CampaignRanking
+                                    campaigns={campaigns}
+                                    loading={isLoadingData}
+                                    journeyLabels={journeyLabels}
+                                />
+                            </div>
                         </div>
                     </section>
 
-
-                    {/* 2. Performance & Insights Row */}
-                    <section className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                        {/* Ranking takes 1/3 but is full width on mobile */}
-                        <div className="lg:col-span-1 min-w-0">
-                            <CampaignRanking campaigns={campaigns} loading={isLoadingData} />
-                        </div>
-
-                        {/* Evolution takes 2/3 */}
-                        <div className="lg:col-span-2 min-w-0 h-[400px]">
+                    {/* 2. Performance & Insights Charts Row */}
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        {/* Evolution Chart */}
+                        <section className="w-full h-[400px]">
                             <EvolutionChart
                                 data={evolutionData}
                                 loading={isLoadingData}
                             />
-                        </div>
-                    </section>
+                        </section>
 
-                    {/* 3. Operational Analysis Row */}
-                    <section className="w-full h-[400px]">
-                        <FunnelChart
-                            data={filteredCampaigns}
-                            selectedId={selectedCampaignId}
-                            journeyLabels={integrationConfig?.journeyMap}
-                            loading={isLoadingData}
-                        />
-                    </section>
+                        {/* Funnel Chart */}
+                        <section className="w-full h-[400px]">
+                            <FunnelChart
+                                data={filteredCampaigns}
+                                selectedId={selectedCampaignId}
+                                journeyLabels={integrationConfig?.journeyMap}
+                                loading={isLoadingData}
+                            />
+                        </section>
+                    </div>
                 </div>
 
                 {/* Floating Campaign Sidebar */}
@@ -454,6 +498,22 @@ const HomeContent = () => {
                     isOpen={isCampaignSidebarOpen}
                     setIsOpen={setIsCampaignSidebarOpen}
                 />
+
+                {/* Floating Reset Button */}
+                {selectedCampaignId && (
+                    <button
+                        onClick={() => setSelectedCampaignId(null)}
+                        className="fixed bottom-8 right-8 z-[60] bg-brand-500 text-white w-14 h-14 hover:w-44 rounded-full shadow-2xl hover:bg-brand-600 transition-all duration-300 hover:scale-105 group active:scale-95 flex items-center overflow-hidden"
+                        title="Resetar para todas as campanhas"
+                    >
+                        <div className="w-14 h-14 flex items-center justify-center shrink-0">
+                            <RefreshCw size={20} className="group-hover:rotate-180 transition-transform duration-500" />
+                        </div>
+                        <span className="opacity-0 group-hover:opacity-100 transition-opacity duration-300 font-bold text-sm whitespace-nowrap pr-6">
+                            Limpar Filtro
+                        </span>
+                    </button>
+                )}
             </main >
         </div >
     );
