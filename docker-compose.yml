@@ -14,6 +14,9 @@ services:
       - META_APP_SECRET=${META_APP_SECRET}
       - API_KEY=${API_KEY}
       - NEXT_PUBLIC_META_APP_ID=${NEXT_PUBLIC_META_APP_ID}
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
+      - GOOGLE_DEVELOPER_TOKEN=${GOOGLE_DEVELOPER_TOKEN}
     restart: unless-stopped
     depends_on:
       database:
