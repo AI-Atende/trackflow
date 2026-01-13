@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
 import { Sparkles, RefreshCw } from 'lucide-react';
-import { AdCampaign } from '../types';
+import { AdCampaign, CampaignHierarchy } from '../types';
 import ReactMarkdown from 'react-markdown';
 import { Skeleton } from './Skeleton';
+// import { analyzeCampaignData } from '@/services/geminiService';
 
 interface AiInsightsProps {
-  campaigns: AdCampaign[];
+  campaigns: (AdCampaign | CampaignHierarchy)[];
   loading?: boolean;
 }
 
@@ -18,19 +19,37 @@ export const AiInsights: React.FC<AiInsightsProps> = ({ campaigns, loading: pare
   const handleAnalyze = async () => {
     setInternalLoading(true);
     try {
+      // Map to consistent structure for AI
+      const simplifiedCampaigns = campaigns.map(c => {
+        // Handle CampaignHierarchy structure which might calculate metrics differently or have them pre-calculated
+        const spend = typeof c.spend === 'number' ? c.spend : 0;
+        const revenue = typeof c.revenue === 'number' ? c.revenue : 0;
+        // Safe access to data stages
+        const leads = (c as any).data?.stage1 || 0;
+
+        return {
+          name: c.name,
+          status: c.status,
+          spend: spend,
+          revenue: revenue,
+          leads: leads,
+          roas: spend > 0 ? revenue / spend : 0,
+        };
+      });
+
       const res = await fetch('/api/ai/insights', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ campaigns }),
+        body: JSON.stringify({ campaigns: simplifiedCampaigns }),
       });
 
       if (res.ok) {
         const data = await res.json();
         setAnalysis(data.analysis);
       } else {
-        setAnalysis("Erro ao gerar insights. Tente novamente.");
+        setAnalysis("Erro ao gerar insights. Verifique a API Key ou tente novamente.");
       }
     } catch (error) {
       console.error("Erro ao chamar API de IA:", error);

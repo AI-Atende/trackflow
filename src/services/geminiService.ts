@@ -10,7 +10,7 @@ const getClient = () => {
   return new GoogleGenAI({ apiKey });
 };
 
-export const analyzeCampaignData = async (campaigns: AdCampaign[]): Promise<string> => {
+export const analyzeCampaignData = async (campaigns: any[]): Promise<string> => {
   const client = getClient();
   if (!client) return "API_KEY não configurada. Adicione sua chave para insights de IA.";
 
