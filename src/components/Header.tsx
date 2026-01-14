@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Menu, Search, Bell, User, LogOut } from "lucide-react";
 import { DateRangePicker, DateRange } from "@/components/DateRangePicker";
 import { SyncButton } from "@/components/SyncButton";
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import { signOut } from 'next-auth/react';
 
 interface HeaderProps {
@@ -25,6 +25,7 @@ export const Header = ({
   setIsMobileMenuOpen
 }: HeaderProps) => {
   const router = useRouter();
+  const pathname = usePathname();
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
 
   return (
@@ -40,17 +41,19 @@ export const Header = ({
         <DateRangePicker date={dateRange} setDate={setDateRange} />
       </div>
 
-      {/* Center: Search Bar */}
-      <div className="flex-1 max-w-md hidden md:flex items-center relative">
-        <Search className="absolute left-3 text-muted-foreground w-4 h-4" />
-        <input
-          type="text"
-          placeholder="Buscar campanhas..."
-          className="w-full pl-9 pr-4 py-2 bg-secondary/50 border border-border rounded-full text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/20 transition-all"
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-        />
-      </div>
+      {/* Center: Search Bar - Only visible on /campaigns */}
+      {pathname === '/campaigns' && (
+        <div className="flex-1 max-w-md hidden md:flex items-center relative transition-all duration-300 animate-in fade-in slide-in-from-top-1">
+          <Search className="absolute left-3 text-muted-foreground w-4 h-4" />
+          <input
+            type="text"
+            placeholder="Buscar campanhas..."
+            className="w-full pl-9 pr-4 py-2 bg-secondary/50 border border-border rounded-full text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/20 transition-all"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+          />
+        </div>
+      )}
 
       {/* Right: Actions & Profile */}
       <div className="flex items-center gap-3">

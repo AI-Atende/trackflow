@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ChevronRight, ChevronDown } from 'lucide-react';
+import { ChevronRight, ChevronDown, Folder, LayoutGrid, Inbox, MoreHorizontal, MessageSquare } from 'lucide-react';
 import { CampaignHierarchy } from '@/types';
 import { Tooltip } from './Tooltip';
 import { Skeleton } from './Skeleton';
@@ -51,33 +51,51 @@ const HierarchyRow: React.FC<RowProps> = ({ node, level, columns, renderCell, on
 
   return (
     <>
-      <tr className={`border-b border-border transition-colors ${evaluation.bg || ''} ${evaluation.hoverBg || 'hover:bg-secondary/20'}`}>
+      <tr className={`border-b border-border transition-colors ${level === 2 ? (evaluation.bg || '') : ''} ${level === 2 ? (evaluation.hoverBg || 'hover:bg-secondary/20') : 'hover:bg-secondary/20'}`}>
         {columns.map(key => {
           if (key === 'name') {
             return (
               <td key={key} className="py-3 pr-4" style={{ paddingLeft: `${paddingLeft}px` }}>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-3 group">
                   {hasChildren ? (
-                    <button onClick={() => setExpanded(!expanded)} className="text-muted-foreground hover:text-foreground">
+                    <button
+                      onClick={() => setExpanded(!expanded)}
+                      className="p-1 rounded-md hover:bg-secondary/50 text-muted-foreground hover:text-foreground transition-colors"
+                    >
                       {expanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
                     </button>
                   ) : (
-                    <div className="w-4" />
+                    <div className="w-6" />
                   )}
 
-                  <span
-                    className={`font-medium ${level === 0 ? 'text-foreground' : 'text-muted-foreground'} truncate max-w-[350px] hover:text-brand-500 cursor-copy transition-colors`}
-                    title={node.name}
-                    onClick={(e) => { e.stopPropagation(); onCopy(node.name); }}
-                  >
-                    {node.name}
-                  </span>
+                  <div className={`
+                    p-1.5 rounded-lg shrink-0
+                    ${level === 0 ? 'bg-blue-500/10 text-blue-500' : ''}
+                    ${level === 1 ? 'bg-purple-500/10 text-purple-500' : ''}
+                    ${level === 2 ? 'bg-secondary text-foreground' : ''}
+                  `}>
+                    {level === 0 && <Folder size={16} />}
+                    {level === 1 && <LayoutGrid size={16} />}
+                    {level === 2 && <Inbox size={16} />}
+                  </div>
 
-                  {level === 0 && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-brand-500/10 text-brand-500 border border-brand-500/20">Campanha</span>}
-                  {level === 1 && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-blue-500/10 text-blue-500 border border-blue-500/20">
-                    {dataSource?.includes('GOOGLE') ? 'Grupo' : 'Conjunto'}
-                  </span>}
-                  {level === 2 && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-purple-500/10 text-purple-500 border border-purple-500/20">Anúncio</span>}
+                  <div className="flex flex-col min-w-0">
+                    <span
+                      className={`font-semibold text-sm truncate max-w-[300px] cursor-copy transition-colors hover:text-brand-500 ${level === 0 ? 'text-foreground' : 'text-muted-foreground'}`}
+                      title={node.name}
+                      onClick={(e) => { e.stopPropagation(); onCopy(node.name); }}
+                    >
+                      {node.name}
+                    </span>
+                    {level === 2 && (
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[10px] uppercase font-bold text-muted-foreground/70">Mensagem</span>
+                        <span className="text-xs text-muted-foreground italic truncate max-w-[200px]">
+                          {node.name}
+                        </span>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </td>
             );
@@ -110,33 +128,52 @@ const HierarchyRowWrapper = ({ node, level, columns, renderCell, onCopy, getEval
 
   return (
     <>
-      <tr className={`border-b border-border transition-colors ${evaluation.bg || ''} ${evaluation.hoverBg || 'hover:bg-secondary/20'}`}>
+      <tr className={`border-b border-border transition-colors ${level === 2 ? (evaluation.bg || '') : ''} ${level === 2 ? (evaluation.hoverBg || 'hover:bg-secondary/20') : 'hover:bg-secondary/20'}`}>
         {columns.map(key => {
           if (key === 'name') {
             return (
               <td key={key} className="py-3 pr-4" style={{ paddingLeft: `${paddingLeft}px` }}>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-3 group">
                   {hasChildren ? (
-                    <button onClick={() => setExpanded(!expanded)} className="text-muted-foreground hover:text-foreground">
+                    <button
+                      onClick={() => setExpanded(!expanded)}
+                      className="p-1 rounded-md hover:bg-secondary/50 text-muted-foreground hover:text-foreground transition-colors"
+                    >
                       {expanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
                     </button>
                   ) : (
-                    <div className="w-4" />
+                    <div className="w-6" /> // Spacer
                   )}
 
-                  <span
-                    className={`font-medium ${level === 0 ? 'text-foreground' : 'text-muted-foreground'} truncate max-w-[350px] hover:text-brand-500 cursor-copy transition-colors`}
-                    title={node.name}
-                    onClick={(e) => { e.stopPropagation(); onCopy(node.name); }}
-                  >
-                    {node.name}
-                  </span>
+                  {/* Icon Based on Level/Type */}
+                  <div className={`
+                    p-1.5 rounded-lg shrink-0
+                    ${level === 0 ? 'bg-blue-500/10 text-blue-500' : ''}
+                    ${level === 1 ? 'bg-purple-500/10 text-purple-500' : ''}
+                    ${level === 2 ? 'bg-secondary text-foreground' : ''}
+                  `}>
+                    {level === 0 && <Folder size={16} />}
+                    {level === 1 && <LayoutGrid size={16} />}
+                    {level === 2 && <Inbox size={16} />}
+                  </div>
 
-                  {level === 0 && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-brand-500/10 text-brand-500 border border-brand-500/20">Campanha</span>}
-                  {level === 1 && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-blue-500/10 text-blue-500 border border-blue-500/20">
-                    {dataSource?.includes('GOOGLE') ? 'Grupo' : 'Conjunto'}
-                  </span>}
-                  {level === 2 && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-purple-500/10 text-purple-500 border border-purple-500/20">Anúncio</span>}
+                  <div className="flex flex-col min-w-0">
+                    <span
+                      className={`font-semibold text-sm truncate max-w-[300px] cursor-copy transition-colors hover:text-brand-500 ${level === 0 ? 'text-foreground' : 'text-muted-foreground'}`}
+                      title={node.name}
+                      onClick={(e) => { e.stopPropagation(); onCopy(node.name); }}
+                    >
+                      {node.name}
+                    </span>
+                    {level === 2 && (
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[10px] uppercase font-bold text-muted-foreground/70">Mensagem</span>
+                        <span className="text-xs text-muted-foreground italic truncate max-w-[200px]">
+                          {node.name} {/* Assuming content is name, or "Olá..." */}
+                        </span>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </td>
             );
