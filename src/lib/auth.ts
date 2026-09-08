@@ -128,6 +128,28 @@ export const authOptions: NextAuthOptions = {
                     throw new Error("Usuário inativo.");
                 }
 
+                // Mirror the portal's Kommo subdomain into IntegrationConfig on every login so
+                // the client never has to enter it a second time here — journeyMap/isActive
+                // stay TrackFlow-local (no portal equivalent) and are preserved as-is.
+                const existingKommoConfig = await prisma.integrationConfig.findFirst({
+                    where: { clientId: client.id, provider: "KOMMO" },
+                });
+                if (existingKommoConfig) {
+                    await prisma.integrationConfig.update({
+                        where: { id: existingKommoConfig.id },
+                        data: { config: { subdomain: claims.kommoSubdomain } },
+                    });
+                } else {
+                    await prisma.integrationConfig.create({
+                        data: {
+                            clientId: client.id,
+                            provider: "KOMMO",
+                            isActive: false,
+                            config: { subdomain: claims.kommoSubdomain },
+                        },
+                    });
+                }
+
                 const primaryAdAccount = client.metaAdAccounts?.find(a => a.status === 'ACTIVE') || client.metaAdAccounts?.[0];
 
                 return {

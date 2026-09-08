@@ -8,6 +8,9 @@ export interface PortalSsoClaims {
     clientId: string;
     email: string;
     name: string;
+    /** Kommo subdomain from the portal's KommoConfig for this client, or null if not
+     * configured there. Mirrored into IntegrationConfig on every login — see auth.ts. */
+    kommoSubdomain: string | null;
 }
 
 /**
@@ -21,5 +24,10 @@ export async function verifyPortalSsoToken(token: string): Promise<PortalSsoClai
         throw new Error("Invalid portal SSO token payload");
     }
 
-    return { clientId: payload.sub, email: payload.email, name: payload.name };
+    return {
+        clientId: payload.sub,
+        email: payload.email,
+        name: payload.name,
+        kommoSubdomain: typeof payload.kommoSubdomain === "string" ? payload.kommoSubdomain : null,
+    };
 }

@@ -11,7 +11,9 @@ export async function POST(req: NextRequest) {
 
   const clientId = session.user.clientId;
   const body = await req.json();
-  const { subdomain, journeyMap, isActive } = body;
+  // subdomain is NOT accepted here anymore — it's mirrored from the portal's KommoConfig on
+  // every SSO login (see lib/auth.ts's portal-sso provider), not entered in TrackFlow.
+  const { journeyMap, isActive } = body;
 
   try {
     // Verificar se já existe config
@@ -24,7 +26,6 @@ export async function POST(req: NextRequest) {
         where: { id: existingConfig.id },
         data: {
           isActive,
-          config: { subdomain },
           journeyMap,
         },
       });
@@ -35,7 +36,6 @@ export async function POST(req: NextRequest) {
           clientId,
           provider: "KOMMO",
           isActive,
-          config: { subdomain },
           journeyMap,
         },
       });

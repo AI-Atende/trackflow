@@ -228,7 +228,6 @@ export const KommoConfigModal: React.FC<KommoConfigModalProps> = ({ isOpen, onCl
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           isActive,
-          subdomain,
           journeyMap: journeyStages
         })
       });
@@ -268,7 +267,6 @@ export const KommoConfigModal: React.FC<KommoConfigModalProps> = ({ isOpen, onCl
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           isActive: false,
-          subdomain,
           journeyMap: journeyStages
         })
       });
@@ -377,20 +375,22 @@ export const KommoConfigModal: React.FC<KommoConfigModalProps> = ({ isOpen, onCl
                 </div>
               </div>
 
-              {/* Subdomínio */}
+              {/* Subdomínio — gerenciado no portal, só leitura aqui */}
               <div className="space-y-3">
                 <label className="block text-sm font-medium text-foreground">Subdomínio Kommo</label>
-                <div className="flex items-center gap-2 p-1 bg-secondary/30 rounded-xl border border-border focus-within:border-brand-500 focus-within:ring-2 focus-within:ring-brand-500/20 transition-all">
-                  <span className="pl-4 text-muted-foreground font-mono">https://</span>
-                  <input
-                    type="text"
-                    value={subdomain}
-                    onChange={(e) => setSubdomain(e.target.value)}
-                    placeholder="seunegocio"
-                    className="flex-1 py-2.5 bg-transparent border-none focus:ring-0 text-foreground placeholder-muted-foreground outline-none font-medium"
-                  />
-                  <span className="pr-4 text-muted-foreground font-mono">.kommo.com</span>
-                </div>
+                {subdomain ? (
+                  <div className="flex items-center gap-2 p-1 bg-secondary/30 rounded-xl border border-border">
+                    <span className="pl-4 text-muted-foreground font-mono">https://</span>
+                    <span className="flex-1 py-2.5 text-foreground font-medium font-mono">{subdomain}</span>
+                    <span className="pr-4 text-muted-foreground font-mono">.kommo.com</span>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2 p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-xl text-sm text-yellow-600">
+                    <AlertTriangle size={16} />
+                    Configure o Kommo no portal primeiro — o subdomínio aparece aqui automaticamente.
+                  </div>
+                )}
+                <p className="text-xs text-muted-foreground">Gerenciado no portal, sincronizado a cada login.</p>
               </div>
 
               {/* Jornada de Compra */}
