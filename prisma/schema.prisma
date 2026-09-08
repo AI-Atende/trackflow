@@ -21,7 +21,11 @@ model Client {
   image          String?
   role           Role                @default(MEMBER)
   isActive       Boolean             @default(true)
-  
+
+  // Portal SSO
+  portalClientId String?             @unique // aiatende-portal Client.id — set for accounts provisioned via SSO
+  ssoProvisioned Boolean             @default(false) // skips the phone/birthDate/address/consent profile-completion gate
+
   // Profile Fields
   fullName       String?
   phone          String?

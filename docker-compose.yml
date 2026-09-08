@@ -1,5 +1,6 @@
 services:
   web:
+    image: sunshinedn/trackflow:0.1.0
     build:
       context: .
       dockerfile: Dockerfile
@@ -7,9 +8,11 @@ services:
     working_dir: /app
     environment:
       - NODE_ENV=production
-      - DATABASE_URL=${DATABASE_URL}
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@database:5432/${POSTGRES_DB}?schema=public
       - NEXTAUTH_SECRET=${NEXTAUTH_SECRET}
       - NEXTAUTH_URL=${NEXTAUTH_URL}
+      - TRACKFLOW_SSO_SECRET=${TRACKFLOW_SSO_SECRET}
+      - TRACKFLOW_API_KEY=${TRACKFLOW_API_KEY}
       - META_APP_ID=${META_APP_ID}
       - META_APP_SECRET=${META_APP_SECRET}
       - API_KEY=${API_KEY}
@@ -22,7 +25,7 @@ services:
       database:
         condition: service_healthy
     ports:
-      - "3000:3000"
+      - "${HOST_PORT_WEB:-3010}:3000"
     networks:
       - trackflow-network
 
@@ -34,7 +37,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB}
     ports:
-      - "127.0.0.1:5432:5432"
+      - "127.0.0.1:${HOST_PORT_DB:-5434}:5432"
     volumes:
       - ./data:/var/lib/postgresql/data
     healthcheck:

@@ -2,6 +2,28 @@ import { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
+import crypto from "crypto";
+import { verifyPortalSsoToken } from "@/lib/portal-sso";
+
+function computeIsProfileComplete(client: {
+    ssoProvisioned: boolean;
+    phone: string | null;
+    birthDate: Date | null;
+    address: unknown;
+    termsAccepted: boolean;
+    lgpdConsent: boolean;
+}) {
+    // SSO-provisioned clients inherit terms/LGPD acceptance from the portal contract —
+    // they never need to see the manual complete-profile screen.
+    if (client.ssoProvisioned) return true;
+    return !!(
+        client.phone &&
+        client.birthDate &&
+        client.address &&
+        client.termsAccepted &&
+        client.lgpdConsent
+    );
+}
 
 export const authOptions: NextAuthOptions = {
     providers: [
@@ -40,13 +62,7 @@ export const authOptions: NextAuthOptions = {
 
                 const primaryAdAccount = client.metaAdAccounts?.find(a => a.status === 'ACTIVE') || client.metaAdAccounts?.[0];
 
-                const isProfileComplete = !!(
-                    client.phone &&
-                    client.birthDate &&
-                    client.address &&
-                    client.termsAccepted &&
-                    client.lgpdConsent
-                );
+                const isProfileComplete = computeIsProfileComplete(client);
 
                 console.log("[AUTH] Authorize - User:", client.email, "isProfileComplete:", isProfileComplete);
 
@@ -65,6 +81,69 @@ export const authOptions: NextAuthOptions = {
                     termsAccepted: client.termsAccepted,
                     lgpdConsent: client.lgpdConsent,
                     isProfileComplete, // Pass to token
+                    metaAdAccount: primaryAdAccount ? {
+                        id: primaryAdAccount.id,
+                        adAccountId: primaryAdAccount.adAccountId,
+                        name: primaryAdAccount.name,
+                        status: primaryAdAccount.status,
+                    } : null,
+                } as any;
+            },
+        }),
+        CredentialsProvider({
+            id: "portal-sso",
+            name: "Portal SSO",
+            credentials: {
+                token: { label: "Token", type: "text" },
+            },
+            async authorize(credentials) {
+                if (!credentials?.token) {
+                    return null;
+                }
+
+                const claims = await verifyPortalSsoToken(credentials.token);
+
+                const client = await prisma.client.upsert({
+                    where: { portalClientId: claims.clientId },
+                    create: {
+                        portalClientId: claims.clientId,
+                        ssoProvisioned: true,
+                        email: claims.email,
+                        name: claims.name,
+                        // Never used to log in — SSO is the only path for this account.
+                        passwordHash: await bcrypt.hash(crypto.randomBytes(32).toString("hex"), 10),
+                        role: "MEMBER",
+                        isActive: true,
+                        termsAccepted: true,
+                        lgpdConsent: true,
+                    },
+                    update: {
+                        email: claims.email,
+                        name: claims.name,
+                    },
+                    include: { metaAdAccounts: true },
+                });
+
+                if (!client.isActive) {
+                    throw new Error("Usuário inativo.");
+                }
+
+                const primaryAdAccount = client.metaAdAccounts?.find(a => a.status === 'ACTIVE') || client.metaAdAccounts?.[0];
+
+                return {
+                    id: client.id,
+                    clientId: client.id,
+                    email: client.email,
+                    name: client.name,
+                    role: client.role,
+                    isActive: client.isActive,
+                    image: client.image,
+                    phone: client.phone,
+                    birthDate: client.birthDate,
+                    address: client.address,
+                    termsAccepted: client.termsAccepted,
+                    lgpdConsent: client.lgpdConsent,
+                    isProfileComplete: computeIsProfileComplete(client),
                     metaAdAccount: primaryAdAccount ? {
                         id: primaryAdAccount.id,
                         adAccountId: primaryAdAccount.adAccountId,
@@ -127,17 +206,7 @@ export const authOptions: NextAuthOptions = {
                     token.termsAccepted = dbUser.termsAccepted;
                     token.lgpdConsent = dbUser.lgpdConsent;
 
-                    // Calculate Profile Completeness
-                    // Calculate Profile Completeness
-                    const hasPhone = !!dbUser.phone;
-                    const hasBirthDate = !!dbUser.birthDate;
-                    const hasAddress = !!dbUser.address; // Check if not null
-                    const hasTerms = dbUser.termsAccepted === true;
-                    const hasConsent = dbUser.lgpdConsent === true;
-
-                    console.log("[AUTH] JWT Check - Phone:", hasPhone, "Birth:", hasBirthDate, "Addr:", hasAddress, "Terms:", hasTerms, "Consent:", hasConsent);
-
-                    token.isProfileComplete = hasPhone && hasBirthDate && hasAddress && hasTerms && hasConsent;
+                    token.isProfileComplete = computeIsProfileComplete(dbUser);
                     console.log("[AUTH] JWT - DB Fetch - User:", dbUser.email, "isProfileComplete:", token.isProfileComplete);
                 }
             }

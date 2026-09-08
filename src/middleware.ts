@@ -25,7 +25,13 @@ export default withAuth(
   },
   {
     callbacks: {
-      authorized: ({ token }) => !!token,
+      // getToken() here decodes the session cookie directly — it does NOT re-run the jwt
+      // callback (src/lib/auth.ts), so token.isActive only reflects DB state as of the last
+      // real NextAuth pipeline hit (login, or a session refetch — see AuthProvider.tsx's
+      // polling + signOut guard, which is what actually ends an already-open session soon
+      // after a deactivation). This check mainly blocks a fresh page load with an already
+      // stale/deactivated cookie (e.g. right after authorize() rejected a new login).
+      authorized: ({ token }) => !!token && token.isActive !== false,
     },
   }
 );
@@ -41,6 +47,6 @@ export const config = {
      * - _next/image (image optimization files)
      * - favicon.ico (favicon file)
      */
-    "/((?!auth/login|auth/register|api|legal|_next/static|_next/image|favicon.ico).*)",
+    "/((?!auth/login|auth/register|auth/sso|api|legal|_next/static|_next/image|favicon.ico).*)",
   ],
 };
