@@ -61,10 +61,11 @@ export async function GET(
 
   function wireButtons(sessionCode) {
     if (!sessionCode) return;
-    var buttons = document.querySelectorAll("[data-trackflow-link]");
+    var buttons = document.querySelectorAll("[data-trackflow-link]:not([data-trackflow-ready])");
     buttons.forEach(function (el) {
       var linkId = el.getAttribute("data-trackflow-link");
-      if (!linkId || el.getAttribute("data-trackflow-ready")) return;
+      if (!linkId) return;
+      el.setAttribute("data-trackflow-ready", "pending"); // claim it before the async call resolves
 
       fetch(BASE_URL + "/api/public/pixel/wa-link", {
         method: "POST",
@@ -76,13 +77,36 @@ export async function GET(
           if (data.waLink) {
             el.setAttribute("href", data.waLink);
             el.setAttribute("data-trackflow-ready", "1");
+          } else {
+            el.removeAttribute("data-trackflow-ready");
           }
         })
-        .catch(function () {});
+        .catch(function () { el.removeAttribute("data-trackflow-ready"); });
     });
   }
 
-  ensureSession().then(wireButtons);
+  // The tag manager or framework rendering this page may inject it before the WhatsApp buttons
+  // exist yet (e.g. GTM's default trigger fires as soon as the container loads, not necessarily
+  // after the page's own content renders) — wait for the DOM, then keep watching for buttons
+  // added later (lazy-rendered widgets, client-side routing, cookie-consent-gated content).
+  function start() {
+    ensureSession().then(function (sessionCode) {
+      wireButtons(sessionCode);
+
+      if (window.MutationObserver) {
+        var observer = new MutationObserver(function () {
+          wireButtons(sessionCode);
+        });
+        observer.observe(document.body, { childList: true, subtree: true });
+      }
+    });
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", start);
+  } else {
+    start();
+  }
 })();
 `.trim();
 
