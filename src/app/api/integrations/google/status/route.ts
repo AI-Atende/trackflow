@@ -1,37 +1,37 @@
-import { NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import { NextResponse } from 'next/server';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/lib/auth';
+import { prisma } from '@/lib/prisma';
 
-export async function GET(request: Request) {
+export async function GET(_request: Request) {
   const session = await getServerSession(authOptions);
   if (!session) {
-    return new NextResponse("Unauthorized", { status: 401 });
+    return new NextResponse('Unauthorized', { status: 401 });
   }
 
   const client = await prisma.client.findUnique({
     where: { id: session.user.clientId },
-    include: { googleAdAccounts: true }
+    include: { googleAdAccounts: true },
   });
 
   if (!client) {
-    return new NextResponse("Client not found", { status: 404 });
+    return new NextResponse('Client not found', { status: 404 });
   }
 
   const isConnected = !!client.googleUserRefreshToken;
-  const activeAccount = client.googleAdAccounts.find(a => a.status === "ACTIVE");
+  const activeAccount = client.googleAdAccounts.find((a) => a.status === 'ACTIVE');
 
   return NextResponse.json({
     isConnected,
     accountName: activeAccount?.name || null,
-    customerId: activeAccount?.customerId || null
+    customerId: activeAccount?.customerId || null,
   });
 }
 
-export async function DELETE(request: Request) {
+export async function DELETE(_request: Request) {
   const session = await getServerSession(authOptions);
   if (!session) {
-    return new NextResponse("Unauthorized", { status: 401 });
+    return new NextResponse('Unauthorized', { status: 401 });
   }
 
   // Disconnect: Remove tokens and deactivate accounts
@@ -40,13 +40,13 @@ export async function DELETE(request: Request) {
     data: {
       googleUserAccessToken: null,
       googleUserRefreshToken: null,
-      googleUserTokenExpiry: null
-    }
+      googleUserTokenExpiry: null,
+    },
   });
 
   await prisma.googleAdAccount.updateMany({
     where: { clientId: session.user.clientId },
-    data: { status: "DISCONNECTED" }
+    data: { status: 'DISCONNECTED' },
   });
 
   return NextResponse.json({ success: true });

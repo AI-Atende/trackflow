@@ -1,18 +1,13 @@
-"use client";
+'use client';
 
-import React, { useState, useEffect } from 'react';
-import { useSession } from "next-auth/react";
-import { useRouter } from "next/navigation";
-import { Save, ArrowLeft, Target, DollarSign, TrendingUp, Layers } from "lucide-react";
-import { useToast } from "@/contexts/ToastContext";
-import { Sidebar } from "@/components/Sidebar";
-import { CurrencyInput } from "@/components/ui/CurrencyInput";
-
-interface Goal {
-  type: 'REVENUE' | 'ROAS' | 'CPA';
-  stageIndex?: number | null;
-  value: number;
-}
+import React, { useState, useEffect, useCallback } from 'react';
+import { useSession } from 'next-auth/react';
+import { useRouter } from 'next/navigation';
+import { Save, ArrowLeft, Target, DollarSign, TrendingUp, Layers } from 'lucide-react';
+import { useToast } from '@/contexts/ToastContext';
+import { Sidebar } from '@/components/Sidebar';
+import { CurrencyInput } from '@/components/ui/CurrencyInput';
+import { Account, Goal } from '@/types';
 
 export default function GoalsPage() {
   const { data: session, status } = useSession();
@@ -30,27 +25,21 @@ export default function GoalsPage() {
   const defaultGoals = {
     ROAS: 5.0,
     REVENUE: 10000.0,
-    CPA: 50.0 // Default for all stages if not set
+    CPA: 50.0, // Default for all stages if not set
   };
 
-  useEffect(() => {
-    if (status === "unauthenticated") {
-      router.push("/auth/login");
-    } else if (status === "authenticated") {
-      fetchData();
-    }
-  }, [status, router]);
-
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     setIsLoading(true);
     try {
       // 1. Fetch Integration Config (for Journey Map)
       const accountsRes = await fetch('/api/accounts');
-      const accounts = await accountsRes.json();
-      const currentAccount = accounts.find((a: any) => a.id === session?.user?.clientId);
+      const accounts: Account[] = await accountsRes.json();
+      const currentAccount = accounts.find((a) => a.id === session?.user?.clientId);
 
       if (currentAccount) {
-        const integrationRes = await fetch(`/api/integrations/kommo?targetAccountId=${currentAccount.id}`);
+        const integrationRes = await fetch(
+          `/api/integrations/kommo?targetAccountId=${currentAccount.id}`,
+        );
         if (integrationRes.ok) {
           const config = await integrationRes.json();
           if (config.isActive) {
@@ -67,21 +56,37 @@ export default function GoalsPage() {
         setGoals(data);
       }
     } catch (error) {
-      console.error("Error fetching settings data:", error);
-      showToast("Erro ao carregar configurações.", "error");
+      console.error('Error fetching settings data:', error);
+      showToast('Erro ao carregar configurações.', 'error');
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [session, showToast]);
+
+  useEffect(() => {
+    if (status === 'unauthenticated') {
+      router.push('/auth/login');
+    } else if (status === 'authenticated') {
+      (async () => {
+        await fetchData();
+      })();
+    }
+  }, [status, router, fetchData]);
 
   const getGoalValue = (type: 'REVENUE' | 'ROAS' | 'CPA', stageIndex?: number) => {
-    const goal = goals.find(g => g.type === type && (stageIndex === undefined || g.stageIndex === stageIndex));
-    return goal ? goal.value : (type === 'CPA' ? defaultGoals.CPA : defaultGoals[type]);
+    const goal = goals.find(
+      (g) => g.type === type && (stageIndex === undefined || g.stageIndex === stageIndex),
+    );
+    return goal ? goal.value : type === 'CPA' ? defaultGoals.CPA : defaultGoals[type];
   };
 
-  const handleGoalChange = (type: 'REVENUE' | 'ROAS' | 'CPA', value: number, stageIndex?: number) => {
-    setGoals(prev => {
-      const existingIndex = prev.findIndex(g => g.type === type && g.stageIndex === stageIndex);
+  const handleGoalChange = (
+    type: 'REVENUE' | 'ROAS' | 'CPA',
+    value: number,
+    stageIndex?: number,
+  ) => {
+    setGoals((prev) => {
+      const existingIndex = prev.findIndex((g) => g.type === type && g.stageIndex === stageIndex);
       if (existingIndex >= 0) {
         const newGoals = [...prev];
         newGoals[existingIndex] = { ...newGoals[existingIndex], value };
@@ -102,19 +107,19 @@ export default function GoalsPage() {
       });
 
       if (res.ok) {
-        showToast("Metas atualizadas com sucesso!", "success");
+        showToast('Metas atualizadas com sucesso!', 'success');
       } else {
-        showToast("Erro ao salvar metas.", "error");
+        showToast('Erro ao salvar metas.', 'error');
       }
     } catch (error) {
-      console.error("Error saving goals:", error);
-      showToast("Erro ao salvar metas.", "error");
+      console.error('Error saving goals:', error);
+      showToast('Erro ao salvar metas.', 'error');
     } finally {
       setIsSaving(false);
     }
   };
 
-  if (status === "loading" || isLoading) {
+  if (status === 'loading' || isLoading) {
     return <div className="flex items-center justify-center min-h-screen">Carregando...</div>;
   }
 
@@ -123,15 +128,22 @@ export default function GoalsPage() {
       <Sidebar
         isOpen={isMobileMenuOpen}
         onClose={() => setIsMobileMenuOpen(false)}
-        currentAccount={{ id: session?.user?.clientId || '', name: session?.user?.name || '', image: session?.user?.image }}
+        currentAccount={{
+          id: session?.user?.clientId || '',
+          name: session?.user?.name || '',
+          image: session?.user?.image,
+        }}
         availableAccounts={[]} // Not needed for settings context usually, or fetch if needed
-        onAccountChange={() => { }}
+        onAccountChange={() => {}}
       />
 
       <main className="flex-1 flex flex-col h-screen relative overflow-hidden">
         <header className="h-16 bg-card/80 backdrop-blur-md border-b border-border flex items-center justify-between px-4 md:px-8 shadow-sm z-30">
           <div className="flex items-center gap-4">
-            <button onClick={() => router.back()} className="p-2 hover:bg-secondary rounded-lg transition-colors">
+            <button
+              onClick={() => router.back()}
+              className="p-2 hover:bg-secondary rounded-lg transition-colors"
+            >
               <ArrowLeft size={20} className="text-muted-foreground" />
             </button>
             <h1 className="text-xl font-bold text-foreground">Configurar Metas</h1>
@@ -140,7 +152,6 @@ export default function GoalsPage() {
 
         <div className="flex-1 overflow-y-auto p-6 md:p-8 space-y-8 bg-background">
           <div className="max-w-4xl mx-auto space-y-8">
-
             {/* General Goals Section */}
             <section className="space-y-4">
               <div className="flex items-center gap-2 pb-2 border-b border-border">
@@ -161,9 +172,13 @@ export default function GoalsPage() {
                       onChange={(e) => handleGoalChange('ROAS', parseFloat(e.target.value))}
                       className="w-full pl-4 pr-12 py-2.5 bg-secondary/30 border border-border rounded-xl focus:ring-2 focus:ring-brand-500/50 outline-none transition-all"
                     />
-                    <span className="absolute right-4 top-2.5 text-muted-foreground font-bold">x</span>
+                    <span className="absolute right-4 top-2.5 text-muted-foreground font-bold">
+                      x
+                    </span>
                   </div>
-                  <p className="text-xs text-muted-foreground">Retorno sobre investimento desejado.</p>
+                  <p className="text-xs text-muted-foreground">
+                    Retorno sobre investimento desejado.
+                  </p>
                 </div>
 
                 <div className="space-y-2">
@@ -177,7 +192,9 @@ export default function GoalsPage() {
                       className="w-full pl-4 pr-4 py-2.5 bg-secondary/30 border border-border rounded-xl focus:ring-2 focus:ring-brand-500/50 outline-none transition-all"
                     />
                   </div>
-                  <p className="text-xs text-muted-foreground">Valor planejado para receita total.</p>
+                  <p className="text-xs text-muted-foreground">
+                    Valor planejado para receita total.
+                  </p>
                 </div>
               </div>
             </section>
@@ -187,14 +204,21 @@ export default function GoalsPage() {
               <section className="space-y-4 pt-6">
                 <div className="flex items-center gap-2 pb-2 border-b border-border">
                   <Layers className="text-blue-500" size={24} />
-                  <h2 className="text-lg font-bold text-foreground">Metas de Custo por Etapa (CPA)</h2>
+                  <h2 className="text-lg font-bold text-foreground">
+                    Metas de Custo por Etapa (CPA)
+                  </h2>
                 </div>
-                <p className="text-sm text-muted-foreground">Defina o custo máximo desejado para cada etapa do funil.</p>
+                <p className="text-sm text-muted-foreground">
+                  Defina o custo máximo desejado para cada etapa do funil.
+                </p>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                   {journeyMap.map((stage, index) => (
                     <div key={index} className="space-y-2">
-                      <label className="text-sm font-medium text-foreground truncate block" title={stage}>
+                      <label
+                        className="text-sm font-medium text-foreground truncate block"
+                        title={stage}
+                      >
                         Custo - {stage}
                       </label>
                       <div className="relative">
@@ -216,11 +240,14 @@ export default function GoalsPage() {
                 disabled={isSaving}
                 className="flex items-center gap-2 px-8 py-3 bg-brand-600 text-white font-bold rounded-xl hover:bg-brand-700 shadow-lg shadow-brand-500/20 transition-all transform hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {isSaving ? <div className="animate-spin w-5 h-5 border-2 border-white/30 border-t-white rounded-full" /> : <Save size={20} />}
-                {isSaving ? "Salvando..." : "Salvar Configurações"}
+                {isSaving ? (
+                  <div className="animate-spin w-5 h-5 border-2 border-white/30 border-t-white rounded-full" />
+                ) : (
+                  <Save size={20} />
+                )}
+                {isSaving ? 'Salvando...' : 'Salvar Configurações'}
               </button>
             </div>
-
           </div>
         </div>
       </main>

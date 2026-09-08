@@ -1,10 +1,10 @@
-"use client";
+'use client';
 
 import React, { useState } from 'react';
 
 export default function DebugKommoPage() {
-  const [config, setConfig] = useState<any>(null);
-  const [data, setData] = useState<any>(null);
+  const [config, setConfig] = useState<unknown>(null);
+  const [data, setData] = useState<unknown>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -24,9 +24,8 @@ export default function DebugKommoPage() {
       const dataRes = await fetch(`/api/integrations/kommo/data?since=${today}&until=${today}`);
       const dataJson = await dataRes.json();
       setData(dataJson);
-
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unknown error');
     } finally {
       setLoading(false);
     }
@@ -44,11 +43,7 @@ export default function DebugKommoPage() {
         {loading ? 'Testing...' : 'Run Test'}
       </button>
 
-      {error && (
-        <div className="bg-red-100 text-red-700 p-4 rounded mb-4">
-          Error: {error}
-        </div>
-      )}
+      {error && <div className="bg-red-100 text-red-700 p-4 rounded mb-4">Error: {error}</div>}
 
       <div className="grid grid-cols-2 gap-4">
         <div>

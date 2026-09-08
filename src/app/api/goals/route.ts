@@ -1,16 +1,16 @@
-import { NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import { NextResponse } from 'next/server';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/lib/auth';
+import { prisma } from '@/lib/prisma';
 
-export async function GET(req: Request) {
+export async function GET(_req: Request) {
   try {
     const session = await getServerSession(authOptions);
-    console.log("[API] /api/goals - Session:", JSON.stringify(session, null, 2));
+    console.log('[API] /api/goals - Session:', JSON.stringify(session, null, 2));
 
     if (!session?.user?.clientId) {
-      console.log("[API] /api/goals - Unauthorized: Missing clientId");
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      console.log('[API] /api/goals - Unauthorized: Missing clientId');
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     const goals = await prisma.clientGoal.findMany({
@@ -19,8 +19,8 @@ export async function GET(req: Request) {
 
     return NextResponse.json(goals);
   } catch (error) {
-    console.error("Error fetching goals:", error);
-    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
+    console.error('Error fetching goals:', error);
+    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
   }
 }
 
@@ -28,14 +28,14 @@ export async function PUT(req: Request) {
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user?.clientId) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     const body = await req.json();
     const { goals } = body; // Expecting an array of goals to update/create
 
     if (!Array.isArray(goals)) {
-      return NextResponse.json({ error: "Invalid data format" }, { status: 400 });
+      return NextResponse.json({ error: 'Invalid data format' }, { status: 400 });
     }
 
     const results = [];
@@ -70,7 +70,7 @@ export async function PUT(req: Request) {
 
     return NextResponse.json(results);
   } catch (error) {
-    console.error("Error updating goals:", error);
-    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
+    console.error('Error updating goals:', error);
+    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
   }
 }

@@ -1,12 +1,14 @@
 import React, { useState } from 'react';
-import { Menu, Search, Bell, User, LogOut } from "lucide-react";
-import { DateRangePicker, DateRange } from "@/components/DateRangePicker";
-import { SyncButton } from "@/components/SyncButton";
+import Image from 'next/image';
+import { Menu, Search, Bell, User, LogOut } from 'lucide-react';
+import { DateRangePicker, DateRange } from '@/components/DateRangePicker';
+import { SyncButton } from '@/components/SyncButton';
 import { useRouter, usePathname } from 'next/navigation';
 import { signOut } from 'next-auth/react';
+import type { Session } from 'next-auth';
 
 interface HeaderProps {
-  session: any;
+  session: Session;
   dateRange: DateRange;
   setDateRange: (date: DateRange) => void;
   searchTerm: string;
@@ -22,7 +24,7 @@ export const Header = ({
   searchTerm,
   setSearchTerm,
   onSyncSuccess,
-  setIsMobileMenuOpen
+  setIsMobileMenuOpen,
 }: HeaderProps) => {
   const router = useRouter();
   const pathname = usePathname();
@@ -57,11 +59,7 @@ export const Header = ({
 
       {/* Right: Actions & Profile */}
       <div className="flex items-center gap-3">
-        <SyncButton
-          session={session}
-          dateRange={dateRange}
-          onSyncSuccess={onSyncSuccess}
-        />
+        <SyncButton session={session} dateRange={dateRange} onSyncSuccess={onSyncSuccess} />
 
         <button className="p-2 text-slate-400 hover:text-brand-600 hover:bg-brand-50 rounded-full transition-all relative">
           <Bell size={20} />
@@ -78,11 +76,20 @@ export const Header = ({
           <div className="flex items-center gap-3 cursor-pointer py-2">
             <div className="text-right hidden md:block">
               <p className="text-sm font-semibold text-foreground">{session.user.name}</p>
-              <p className="text-xs text-muted-foreground">{session.user.role === 'ADMIN' ? 'Administrador' : 'Membro'}</p>
+              <p className="text-xs text-muted-foreground">
+                {session.user.role === 'ADMIN' ? 'Administrador' : 'Membro'}
+              </p>
             </div>
             <div className="w-10 h-10 rounded-full bg-secondary border-2 border-border shadow-sm overflow-hidden">
               {session.user.image ? (
-                <img src={session.user.image} alt="Profile" className="w-full h-full object-cover" />
+                <Image
+                  src={session.user.image}
+                  alt="Profile"
+                  width={40}
+                  height={40}
+                  unoptimized
+                  className="w-full h-full object-cover"
+                />
               ) : (
                 <div className="w-full h-full flex items-center justify-center bg-brand-500/10 text-brand-500 font-bold">
                   {session.user.name?.[0]?.toUpperCase() || 'U'}

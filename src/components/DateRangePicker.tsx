@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   format,
   subDays,
@@ -16,10 +16,10 @@ import {
   startOfDay,
   endOfDay,
   setYear,
-  getYear
+  getYear,
 } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, ChevronDown, X } from 'lucide-react';
+import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, ChevronDown } from 'lucide-react';
 
 export type DateRange = {
   from: Date;
@@ -99,9 +99,15 @@ export const DateRangePicker: React.FC<DateRangePickerProps> = ({ date, setDate 
   const [isOpen, setIsOpen] = useState(false);
   const [viewDate, setViewDate] = useState(new Date()); // Mês visível no calendário (lado esquerdo)
   const [tempDate, setTempDate] = useState<DateRange>(date); // Estado temporário durante a seleção personalizada
-  const [hoverDate, setHoverDate] = useState<Date | null>(null);
-  const [activePreset, setActivePreset] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+
+  const activePreset = useMemo(() => {
+    const foundPreset = PRESETS.find((preset) => {
+      const presetRange = preset.getValue();
+      return isSameDay(presetRange.from, date.from) && isSameDay(presetRange.to, date.to);
+    });
+    return foundPreset ? foundPreset.label : 'Período personalizado';
+  }, [date]);
 
   // Fechar ao clicar fora
   useEffect(() => {
@@ -114,22 +120,14 @@ export const DateRangePicker: React.FC<DateRangePickerProps> = ({ date, setDate 
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Atualizar preset ativo quando a data muda
-  useEffect(() => {
-    const foundPreset = PRESETS.find(preset => {
-      const presetRange = preset.getValue();
-      return isSameDay(presetRange.from, date.from) && isSameDay(presetRange.to, date.to);
-    });
-    setActivePreset(foundPreset ? foundPreset.label : 'Período personalizado');
-  }, [date]);
-
-  // Sincronizar tempDate quando abrir
-  useEffect(() => {
-    if (isOpen) {
+  const handleToggleOpen = () => {
+    if (!isOpen) {
+      // Sincronizar tempDate ao abrir
       setTempDate(date);
       setViewDate(date.from);
     }
-  }, [isOpen, date]);
+    setIsOpen(!isOpen);
+  };
 
   const handlePresetClick = (preset: Preset) => {
     const newRange = preset.getValue();
@@ -144,7 +142,10 @@ export const DateRangePicker: React.FC<DateRangePickerProps> = ({ date, setDate 
       return;
     }
 
-    if (isBefore(day, tempDate.from) || (tempDate.from && tempDate.to && !isSameDay(tempDate.from, tempDate.to))) {
+    if (
+      isBefore(day, tempDate.from) ||
+      (tempDate.from && tempDate.to && !isSameDay(tempDate.from, tempDate.to))
+    ) {
       // Novo início se clicar antes do início atual OU se já tiver um intervalo completo selecionado
       setTempDate({ from: day, to: day });
     } else {
@@ -165,7 +166,7 @@ export const DateRangePicker: React.FC<DateRangePickerProps> = ({ date, setDate 
     // Garantir horário 00:00:00 -> 23:59:59
     setDate({
       from: startOfDay(finalFrom),
-      to: endOfDay(finalTo)
+      to: endOfDay(finalTo),
     });
     setIsOpen(false);
   };
@@ -188,13 +189,19 @@ export const DateRangePicker: React.FC<DateRangePickerProps> = ({ date, setDate 
         </div>
         <div className="grid grid-cols-7 gap-1 text-center mb-2">
           {['S', 'T', 'Q', 'Q', 'S', 'S', 'D'].map((d, i) => (
-            <div key={i} className="text-xs font-medium text-muted-foreground">{d}</div>
+            <div key={i} className="text-xs font-medium text-muted-foreground">
+              {d}
+            </div>
           ))}
         </div>
         <div className="grid grid-cols-7 gap-1">
           {days.map((day, i) => {
             const isCurrentMonth = day.getMonth() === monthDate.getMonth();
-            const isSelected = isCurrentMonth && (isSameDay(day, tempDate.from) || isSameDay(day, tempDate.to) || (isAfter(day, tempDate.from) && isBefore(day, tempDate.to)));
+            const isSelected =
+              isCurrentMonth &&
+              (isSameDay(day, tempDate.from) ||
+                isSameDay(day, tempDate.to) ||
+                (isAfter(day, tempDate.from) && isBefore(day, tempDate.to)));
             const isStart = isCurrentMonth && isSameDay(day, tempDate.from);
             const isEnd = isCurrentMonth && isSameDay(day, tempDate.to);
             const isToday = isSameDay(day, new Date());
@@ -216,8 +223,6 @@ export const DateRangePicker: React.FC<DateRangePickerProps> = ({ date, setDate 
               <button
                 key={i}
                 onClick={() => handleDayClick(day)}
-                onMouseEnter={() => setHoverDate(day)}
-                onMouseLeave={() => setHoverDate(null)}
                 className={`
                                     h-8 w-8 text-sm flex items-center justify-center relative transition-all
                                     ${bgClass}
@@ -239,7 +244,7 @@ export const DateRangePicker: React.FC<DateRangePickerProps> = ({ date, setDate 
     <div className="relative" ref={containerRef}>
       {/* Trigger Button */}
       <button
-        onClick={() => setIsOpen(!isOpen)}
+        onClick={handleToggleOpen}
         className="flex items-center gap-2 text-sm text-muted-foreground bg-card px-3 py-1.5 rounded-full border border-border hover:bg-accent hover:text-accent-foreground transition-colors"
       >
         <CalendarIcon size={14} />
@@ -253,7 +258,6 @@ export const DateRangePicker: React.FC<DateRangePickerProps> = ({ date, setDate 
       {/* Dropdown / Modal */}
       {isOpen && (
         <div className="absolute left-0 top-full mt-2 bg-popover/95 backdrop-blur-xl text-popover-foreground rounded-xl shadow-2xl border border-border z-50 flex flex-col md:flex-row overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-
           {/* Sidebar Presets */}
           <div className="w-full md:w-48 bg-muted/30 border-b md:border-b-0 md:border-r border-border p-2 flex flex-col gap-1">
             {PRESETS.map((preset, index) => {
@@ -311,24 +315,25 @@ export const DateRangePicker: React.FC<DateRangePickerProps> = ({ date, setDate 
                 onChange={(e) => setViewDate(setYear(viewDate, parseInt(e.target.value)))}
                 className="text-sm border-none bg-transparent font-semibold text-foreground cursor-pointer focus:ring-0"
               >
-                {Array.from({ length: 10 }, (_, i) => getYear(new Date()) - 5 + i).map(year => (
-                  <option key={year} value={year} className="bg-popover text-popover-foreground">{year}</option>
+                {Array.from({ length: 10 }, (_, i) => getYear(new Date()) - 5 + i).map((year) => (
+                  <option key={year} value={year} className="bg-popover text-popover-foreground">
+                    {year}
+                  </option>
                 ))}
               </select>
             </div>
 
             <div className="flex gap-8">
               {renderCalendarMonth(viewDate)}
-              <div className="hidden md:block">
-                {renderCalendarMonth(addMonths(viewDate, 1))}
-              </div>
+              <div className="hidden md:block">{renderCalendarMonth(addMonths(viewDate, 1))}</div>
             </div>
 
             <div className="flex items-center justify-between mt-6 pt-4 border-t border-border">
               <div className="text-xs text-muted-foreground">
                 {tempDate.from && tempDate.to ? (
                   <span>
-                    Selecionado: <span className="font-medium text-foreground">{formatDateRange(tempDate)}</span>
+                    Selecionado:{' '}
+                    <span className="font-medium text-foreground">{formatDateRange(tempDate)}</span>
                   </span>
                 ) : (
                   <span>Selecione o período</span>

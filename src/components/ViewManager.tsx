@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Save, Trash2, Layout, Settings, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Select } from '@/components/ui/Select';
@@ -18,7 +18,12 @@ interface ViewManagerProps {
   onColumnsChange: (columns: string[]) => void;
 }
 
-export function ViewManager({ dataSource, availableColumns, currentColumns, onColumnsChange }: ViewManagerProps) {
+export function ViewManager({
+  dataSource,
+  availableColumns,
+  currentColumns,
+  onColumnsChange,
+}: ViewManagerProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [views, setViews] = useState<View[]>([]);
   const [viewName, setViewName] = useState('');
@@ -30,9 +35,30 @@ export function ViewManager({ dataSource, availableColumns, currentColumns, onCo
   const [showColumns, setShowColumns] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
 
+  const fetchViews = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/views?dataSource=${dataSource}&t=${Date.now()}`);
+      if (res.ok) {
+        const data = await res.json();
+        setViews(data);
+
+        // Apply default view if no columns set
+        const defaultView = data.find((v: View) => v.isDefault);
+        if (defaultView && currentColumns.length === 0) {
+          onColumnsChange(defaultView.columns);
+          setActiveViewId(defaultView.id);
+        }
+      }
+    } catch (error) {
+      console.error('Erro ao buscar views:', error);
+    }
+  }, [dataSource, currentColumns, onColumnsChange]);
+
   useEffect(() => {
-    fetchViews();
-  }, [dataSource]);
+    (async () => {
+      await fetchViews();
+    })();
+  }, [dataSource, fetchViews]);
 
   // Click Outside Logic
   useEffect(() => {
@@ -53,53 +79,40 @@ export function ViewManager({ dataSource, availableColumns, currentColumns, onCo
 
   // Check for changes in current view
   useEffect(() => {
-    if (activeViewId === 'custom') {
-      setHasChanges(false);
-      return;
-    }
+    (() => {
+      if (activeViewId === 'custom') {
+        setHasChanges(false);
+        return;
+      }
 
-    const activeView = views.find(v => v.id === activeViewId);
-    if (!activeView) return;
+      const activeView = views.find((v) => v.id === activeViewId);
+      if (!activeView) return;
 
-    const isDifferent =
-      activeView.columns.length !== currentColumns.length ||
-      !activeView.columns.every((col, index) => col === currentColumns[index]);
+      const isDifferent =
+        activeView.columns.length !== currentColumns.length ||
+        !activeView.columns.every((col, index) => col === currentColumns[index]);
 
-    setHasChanges(isDifferent);
+      setHasChanges(isDifferent);
+    })();
   }, [currentColumns, activeViewId, views]);
 
   // Initial load logic - try to match existing view ONLY on mount or when views change
   useEffect(() => {
-    if (views.length > 0 && activeViewId === 'custom' && !hasChanges) {
-      const matchingView = views.find(v =>
-        v.columns.length === currentColumns.length &&
-        v.columns.every((col, index) => col === currentColumns[index])
-      );
+    (() => {
+      if (views.length > 0 && activeViewId === 'custom' && !hasChanges) {
+        const matchingView = views.find(
+          (v) =>
+            v.columns.length === currentColumns.length &&
+            v.columns.every((col, index) => col === currentColumns[index]),
+        );
 
-      if (matchingView) {
-        setActiveViewId(matchingView.id);
-      }
-    }
-  }, [views]);
-
-  const fetchViews = async () => {
-    try {
-      const res = await fetch(`/api/views?dataSource=${dataSource}&t=${Date.now()}`);
-      if (res.ok) {
-        const data = await res.json();
-        setViews(data);
-
-        // Apply default view if no columns set
-        const defaultView = data.find((v: View) => v.isDefault);
-        if (defaultView && currentColumns.length === 0) {
-          onColumnsChange(defaultView.columns);
-          setActiveViewId(defaultView.id);
+        if (matchingView) {
+          setActiveViewId(matchingView.id);
         }
       }
-    } catch (error) {
-      console.error("Erro ao buscar views:", error);
-    }
-  };
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally only re-run when `views` changes (e.g. after fetch), not on every column edit
+  }, [views]);
 
   const saveView = async () => {
     if (!viewName) return;
@@ -112,15 +125,15 @@ export function ViewManager({ dataSource, availableColumns, currentColumns, onCo
           name: viewName,
           dataSource,
           columns: currentColumns,
-          isDefault: false
-        })
+          isDefault: false,
+        }),
       });
       if (res.ok) {
         setViewName('');
         await fetchViews();
       }
     } catch (error) {
-      console.error("Erro ao salvar view:", error);
+      console.error('Erro ao salvar view:', error);
     } finally {
       setLoading(false);
     }
@@ -130,7 +143,7 @@ export function ViewManager({ dataSource, availableColumns, currentColumns, onCo
     if (activeViewId === 'custom') return;
     setLoading(true);
     try {
-      const activeView = views.find(v => v.id === activeViewId);
+      const activeView = views.find((v) => v.id === activeViewId);
       if (!activeView) return;
 
       const res = await fetch(`/api/views/${activeViewId}`, {
@@ -140,8 +153,8 @@ export function ViewManager({ dataSource, availableColumns, currentColumns, onCo
           name: activeView.name,
           dataSource,
           columns: currentColumns,
-          isDefault: activeView.isDefault
-        })
+          isDefault: activeView.isDefault,
+        }),
       });
 
       if (res.ok) {
@@ -149,7 +162,7 @@ export function ViewManager({ dataSource, availableColumns, currentColumns, onCo
         setHasChanges(false);
       }
     } catch (error) {
-      console.error("Erro ao atualizar view:", error);
+      console.error('Erro ao atualizar view:', error);
     } finally {
       setLoading(false);
     }
@@ -164,7 +177,7 @@ export function ViewManager({ dataSource, availableColumns, currentColumns, onCo
         setActiveViewId('custom');
       }
     } catch (error) {
-      console.error("Erro ao deletar view:", error);
+      console.error('Erro ao deletar view:', error);
     }
   };
 
@@ -174,7 +187,7 @@ export function ViewManager({ dataSource, availableColumns, currentColumns, onCo
       return;
     }
 
-    const view = views.find(v => v.id === viewId);
+    const view = views.find((v) => v.id === viewId);
     if (view) {
       onColumnsChange(view.columns);
       setActiveViewId(viewId);
@@ -184,7 +197,7 @@ export function ViewManager({ dataSource, availableColumns, currentColumns, onCo
 
   const toggleColumn = (key: string) => {
     if (currentColumns.includes(key)) {
-      onColumnsChange(currentColumns.filter(c => c !== key));
+      onColumnsChange(currentColumns.filter((c) => c !== key));
     } else {
       onColumnsChange([...currentColumns, key]);
     }
@@ -193,25 +206,33 @@ export function ViewManager({ dataSource, availableColumns, currentColumns, onCo
   // Prepare options for Select
   const viewOptions = [
     { value: 'custom', label: 'Criar nova visualização', icon: <Plus size={14} /> },
-    ...views.map(v => ({ value: v.id, label: v.name, icon: <Layout size={14} /> }))
+    ...views.map((v) => ({ value: v.id, label: v.name, icon: <Layout size={14} /> })),
   ];
 
-  const activeViewName = activeViewId === 'custom' ? 'Visualização' : `Visualização: ${views.find(v => v.id === activeViewId)?.name || ''}`;
+  const activeViewName =
+    activeViewId === 'custom'
+      ? 'Visualização'
+      : `Visualização: ${views.find((v) => v.id === activeViewId)?.name || ''}`;
 
   return (
-
     <div className="relative" ref={modalRef}>
-      <Button variant="outline" size="sm" onClick={() => setIsOpen(!isOpen)} className="flex items-center gap-2">
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={() => setIsOpen(!isOpen)}
+        className="flex items-center gap-2"
+      >
         <Layout className="w-4 h-4" />
         {activeViewName}
       </Button>
 
       {isOpen && (
         <div className="absolute right-0 top-12 z-50 w-[400px] bg-card border border-border rounded-lg shadow-xl p-4 flex flex-col gap-4 max-h-[80vh] animate-in fade-in zoom-in-95 duration-200 text-card-foreground">
-
           {/* 1. Active View Selector */}
           <div>
-            <label className="text-xs font-semibold text-muted-foreground mb-1.5 block">Visualização Ativa</label>
+            <label className="text-xs font-semibold text-muted-foreground mb-1.5 block">
+              Visualização Ativa
+            </label>
             <div className="flex gap-2 items-center">
               <div className="flex-1">
                 <Select
@@ -253,7 +274,9 @@ export function ViewManager({ dataSource, availableColumns, currentColumns, onCo
           {/* 2. Save Current View (Only if Custom) */}
           {activeViewId === 'custom' && (
             <div className="bg-secondary/30 p-3 rounded-lg border border-border">
-              <label className="text-xs font-semibold text-muted-foreground mb-1.5 block">Salvar nova visualização</label>
+              <label className="text-xs font-semibold text-muted-foreground mb-1.5 block">
+                Salvar nova visualização
+              </label>
               <div className="flex gap-2">
                 <input
                   type="text"
@@ -292,11 +315,16 @@ export function ViewManager({ dataSource, availableColumns, currentColumns, onCo
             {showColumns && (
               <div className="mt-3 flex-1 overflow-y-auto pr-1 animate-in slide-in-from-top-2 duration-200">
                 <div className="grid grid-cols-2 gap-2">
-                  {availableColumns.map(col => {
+                  {availableColumns.map((col) => {
                     const isChecked = currentColumns.includes(col.key);
                     return (
-                      <label key={col.key} className={`flex items-center gap-2 p-2 rounded text-sm cursor-pointer border transition-all ${isChecked ? 'bg-brand-500/10 border-brand-500/20 shadow-sm' : 'bg-background border-border hover:border-input'}`}>
-                        <div className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${isChecked ? 'bg-brand-500 border-brand-500' : 'bg-background border-input'}`}>
+                      <label
+                        key={col.key}
+                        className={`flex items-center gap-2 p-2 rounded text-sm cursor-pointer border transition-all ${isChecked ? 'bg-brand-500/10 border-brand-500/20 shadow-sm' : 'bg-background border-border hover:border-input'}`}
+                      >
+                        <div
+                          className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${isChecked ? 'bg-brand-500 border-brand-500' : 'bg-background border-input'}`}
+                        >
                           {isChecked && <Plus size={10} className="text-white rotate-45" />}
                         </div>
                         <input
@@ -305,7 +333,9 @@ export function ViewManager({ dataSource, availableColumns, currentColumns, onCo
                           onChange={() => toggleColumn(col.key)}
                           className="hidden"
                         />
-                        <span className="truncate text-xs font-medium text-foreground">{col.label}</span>
+                        <span className="truncate text-xs font-medium text-foreground">
+                          {col.label}
+                        </span>
                       </label>
                     );
                   })}
@@ -313,7 +343,6 @@ export function ViewManager({ dataSource, availableColumns, currentColumns, onCo
               </div>
             )}
           </div>
-
         </div>
       )}
     </div>

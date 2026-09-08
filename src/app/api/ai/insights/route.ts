@@ -13,7 +13,7 @@ export async function POST(request: Request) {
     const analysis = await analyzeCampaignData(campaigns);
     return NextResponse.json({ analysis });
   } catch (error) {
-    console.error("Error in AI insights route:", error);
+    console.error('Error in AI insights route:', error);
     return NextResponse.json({ error: 'Failed to generate insights' }, { status: 500 });
   }
 }

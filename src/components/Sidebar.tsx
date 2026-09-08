@@ -1,23 +1,47 @@
-"use client";
+'use client';
 
-import { useSession } from "next-auth/react";
-import { LayoutDashboard, BarChart3, Target, Users, Settings, TrendingUp, X, Share2, UserCircle, ChevronLeft, ChevronRight, LogOut, UserPlus, HelpCircle } from "lucide-react";
-import { Select } from "@/components/ui/Select";
-import { useState, useEffect } from "react";
-import { usePathname } from "next/navigation";
-import Link from "next/link";
-import { usePersistentState } from "@/hooks/usePersistentState";
-import { Tooltip } from "@/components/Tooltip";
+import { useSession } from 'next-auth/react';
+import {
+  LayoutDashboard,
+  BarChart3,
+  Target,
+  Users,
+  Settings,
+  TrendingUp,
+  X,
+  UserCircle,
+  ChevronLeft,
+  ChevronRight,
+  HelpCircle,
+} from 'lucide-react';
+import { Select } from '@/components/ui/Select';
+import { useState, useEffect } from 'react';
+import { usePathname } from 'next/navigation';
+import Link from 'next/link';
+import { usePersistentState } from '@/hooks/usePersistentState';
+import { Tooltip } from '@/components/Tooltip';
+
+interface SidebarAccount {
+  id: string;
+  name?: string | null;
+  image?: string | null;
+}
 
 interface SidebarProps {
   isOpen: boolean;
   onClose: () => void;
-  currentAccount: any;
-  availableAccounts: any[];
+  currentAccount: SidebarAccount | null;
+  availableAccounts: SidebarAccount[];
   onAccountChange: (accountId: string) => void;
 }
 
-export const Sidebar = ({ isOpen, onClose, currentAccount, availableAccounts, onAccountChange }: SidebarProps) => {
+export const Sidebar = ({
+  isOpen,
+  onClose,
+  currentAccount,
+  availableAccounts,
+  onAccountChange,
+}: SidebarProps) => {
   const { data: session } = useSession();
   const pathname = usePathname();
   const [isCollapsed, setIsCollapsed] = usePersistentState<boolean>('sidebar_collapsed', false);
@@ -38,17 +62,17 @@ export const Sidebar = ({ isOpen, onClose, currentAccount, availableAccounts, on
 
   if (!session) return null;
 
-  const accountOptions = availableAccounts.map(acc => ({
+  const accountOptions = availableAccounts.map((acc) => ({
     value: acc.id,
-    label: acc.name,
-    icon: <UserCircle size={16} />
+    label: acc.name || 'Conta',
+    icon: <UserCircle size={16} />,
   }));
 
   const navItems = [
-    { href: "/", label: "Dashboard Geral", icon: BarChart3 },
-    { href: "/campaigns", label: "Campanhas", icon: Target },
-    { href: "/settings", label: "Configurações", icon: Settings },
-    { href: "/help", label: "Ajuda", icon: HelpCircle },
+    { href: '/', label: 'Dashboard Geral', icon: BarChart3 },
+    { href: '/campaigns', label: 'Campanhas', icon: Target },
+    { href: '/settings', label: 'Configurações', icon: Settings },
+    { href: '/help', label: 'Ajuda', icon: HelpCircle },
   ];
 
   const isActive = (path: string) => pathname === path;
@@ -67,29 +91,37 @@ export const Sidebar = ({ isOpen, onClose, currentAccount, availableAccounts, on
       )}
 
       {/* Sidebar Container */}
-      <aside className={`
+      <aside
+        className={`
                 fixed md:static inset-y-0 left-0 z-50 bg-card border-r border-border text-card-foreground flex flex-col shadow-xl glass shrink-0 transition-all duration-300 ease-in-out
                 ${isOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
                 ${collapsed ? 'w-20' : 'w-64'}
-            `}>
-
+            `}
+      >
         {/* Header */}
-        <div className={`p-4 border-b border-border flex items-center ${collapsed ? 'justify-center' : 'justify-between'} gap-3 h-16`}>
+        <div
+          className={`p-4 border-b border-border flex items-center ${collapsed ? 'justify-center' : 'justify-between'} gap-3 h-16`}
+        >
           <div
             className="flex items-center gap-3 cursor-pointer overflow-hidden"
             onClick={() => !isMobile && setIsCollapsed(!isCollapsed)}
-            title={collapsed ? "Expandir" : "Recolher"}
+            title={collapsed ? 'Expandir' : 'Recolher'}
           >
             <div className="w-8 h-8 min-w-[32px] bg-brand-500 rounded-lg flex items-center justify-center shadow-lg shadow-brand-500/20">
               <LayoutDashboard className="text-white" size={20} />
             </div>
             {!collapsed && (
-              <span className="text-xl font-bold text-white tracking-tight whitespace-nowrap">TrackFlow</span>
+              <span className="text-xl font-bold text-white tracking-tight whitespace-nowrap">
+                TrackFlow
+              </span>
             )}
           </div>
 
           {/* Mobile Close Button */}
-          <button onClick={onClose} className="md:hidden text-muted-foreground hover:text-foreground">
+          <button
+            onClick={onClose}
+            className="md:hidden text-muted-foreground hover:text-foreground"
+          >
             <X size={24} />
           </button>
 
@@ -113,13 +145,13 @@ export const Sidebar = ({ isOpen, onClose, currentAccount, availableAccounts, on
               </div>
               <Select
                 options={accountOptions}
-                value={currentAccount?.id || ""}
+                value={currentAccount?.id || ''}
                 onChange={onAccountChange}
                 placeholder="Selecione"
               />
             </>
           ) : (
-            <Tooltip content={currentAccount?.name || "Conta"} position="right">
+            <Tooltip content={currentAccount?.name || 'Conta'} position="right">
               <div className="w-10 h-10 rounded-full bg-secondary flex items-center justify-center cursor-pointer hover:bg-secondary/80">
                 <UserCircle size={24} className="text-muted-foreground" />
               </div>
@@ -143,19 +175,21 @@ export const Sidebar = ({ isOpen, onClose, currentAccount, availableAccounts, on
                 href={item.href}
                 className={`
                   flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all group relative
-                  ${active
-                    ? 'bg-brand-600/10 text-brand-400 border border-brand-600/20'
-                    : 'hover:bg-accent hover:text-accent-foreground text-muted-foreground'
+                  ${
+                    active
+                      ? 'bg-brand-600/10 text-brand-400 border border-brand-600/20'
+                      : 'hover:bg-accent hover:text-accent-foreground text-muted-foreground'
                   }
                   ${collapsed ? 'justify-center' : ''}
                 `}
                 title={collapsed ? item.label : undefined}
               >
-                <item.icon size={20} className={`${active ? 'text-brand-400' : 'group-hover:text-foreground'} ${!collapsed && 'group-hover:scale-110'} transition-transform`} />
+                <item.icon
+                  size={20}
+                  className={`${active ? 'text-brand-400' : 'group-hover:text-foreground'} ${!collapsed && 'group-hover:scale-110'} transition-transform`}
+                />
 
-                {!collapsed && (
-                  <span className="font-medium whitespace-nowrap">{item.label}</span>
-                )}
+                {!collapsed && <span className="font-medium whitespace-nowrap">{item.label}</span>}
 
                 {/* Active Indicator for Collapsed Mode */}
                 {collapsed && active && (
@@ -165,22 +199,26 @@ export const Sidebar = ({ isOpen, onClose, currentAccount, availableAccounts, on
             );
           })}
 
-          {session.user.role === "ADMIN" && (
+          {session.user.role === 'ADMIN' && (
             <>
               {!collapsed && <div className="my-2 border-t border-border/50" />}
               <Link
                 href="/admin/users"
                 className={`
                   flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all group relative
-                  ${isActive('/admin/users')
-                    ? 'bg-brand-600/10 text-brand-400 border border-brand-600/20'
-                    : 'hover:bg-accent hover:text-accent-foreground text-muted-foreground'
+                  ${
+                    isActive('/admin/users')
+                      ? 'bg-brand-600/10 text-brand-400 border border-brand-600/20'
+                      : 'hover:bg-accent hover:text-accent-foreground text-muted-foreground'
                   }
                   ${collapsed ? 'justify-center' : ''}
                 `}
-                title={collapsed ? "Gestão de Usuários" : undefined}
+                title={collapsed ? 'Gestão de Usuários' : undefined}
               >
-                <Users size={20} className={`${isActive('/admin/users') ? 'text-brand-400' : 'group-hover:text-foreground'} ${!collapsed && 'group-hover:scale-110'} transition-transform`} />
+                <Users
+                  size={20}
+                  className={`${isActive('/admin/users') ? 'text-brand-400' : 'group-hover:text-foreground'} ${!collapsed && 'group-hover:scale-110'} transition-transform`}
+                />
                 {!collapsed && <span className="font-medium">Gestão de Usuários</span>}
               </Link>
             </>

@@ -1,0 +1,44 @@
+name: Rollback / Redeploy manual
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Tag da imagem a reimplantar (ex: 5.2.9)"
+        required: true
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  retag:
+    name: Retag versão escolhida como latest
+    runs-on: ubuntu-latest
+    steps:
+      - name: Confirmar que a tag existe no Docker Hub
+        run: |
+          VERSION="${{ github.event.inputs.version }}"
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" "https://hub.docker.com/v2/repositories/sunshinedn/trackflow/tags/${VERSION}")
+          if [ "$STATUS" != "200" ]; then
+            echo "::error::Tag $VERSION não existe no Docker Hub."
+            exit 1
+          fi
+      - name: Login no Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Retag da versão escolhida como latest
+        run: |
+          docker pull sunshinedn/trackflow:${{ github.event.inputs.version }}
+          docker tag sunshinedn/trackflow:${{ github.event.inputs.version }} sunshinedn/trackflow:latest
+          docker push sunshinedn/trackflow:latest
+
+  deploy:
+    name: Deploy na VPS
+    needs: retag
+    uses: ./.github/workflows/deploy-rolling.yml
+    with:
+      health_url: ${{ vars.PROD_HEALTH_URL }}
+    secrets: inherit

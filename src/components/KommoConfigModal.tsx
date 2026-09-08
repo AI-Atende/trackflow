@@ -1,5 +1,16 @@
 import React, { useState, useEffect } from 'react';
-import { Save, Plus, Trash2, X, RotateCcw, Layers, Link, GripVertical, Pencil, AlertTriangle } from 'lucide-react';
+import {
+  Save,
+  Plus,
+  Trash2,
+  X,
+  RotateCcw,
+  Layers,
+  Link,
+  GripVertical,
+  Pencil,
+  AlertTriangle,
+} from 'lucide-react';
 import { useToast } from '@/contexts/ToastContext';
 import {
   DndContext,
@@ -33,14 +44,9 @@ interface SortableStageItemProps {
 }
 
 const SortableStageItem = ({ id, stage, index, onEdit }: SortableStageItemProps) => {
-  const {
-    attributes,
-    listeners,
-    setNodeRef,
-    transform,
-    transition,
-    isDragging,
-  } = useSortable({ id });
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id,
+  });
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -66,9 +72,7 @@ const SortableStageItem = ({ id, stage, index, onEdit }: SortableStageItemProps)
         <span className="flex items-center justify-center w-6 h-6 rounded-full bg-brand-500/10 text-brand-500 text-xs font-bold border border-brand-500/20">
           {index + 1}
         </span>
-        <span className="text-sm font-medium text-foreground">
-          {stage}
-        </span>
+        <span className="text-sm font-medium text-foreground">{stage}</span>
       </div>
       <button
         onClick={() => onEdit(index)}
@@ -102,7 +106,9 @@ const EditStageModal = ({ stageName, onSave, onDelete, onClose }: EditStageModal
         </div>
         <div className="p-4 space-y-4">
           <div>
-            <label className="text-sm font-medium text-muted-foreground block mb-2">Nome da Etapa</label>
+            <label className="text-sm font-medium text-muted-foreground block mb-2">
+              Nome da Etapa
+            </label>
             <input
               value={name}
               onChange={(e) => setName(e.target.value)}
@@ -178,7 +184,11 @@ const ConfirmDialog = ({ isOpen, onConfirm, onCancel }: ConfirmDialogProps) => {
   );
 };
 
-export const KommoConfigModal: React.FC<KommoConfigModalProps> = ({ isOpen, onClose, onSuccess }) => {
+export const KommoConfigModal: React.FC<KommoConfigModalProps> = ({
+  isOpen,
+  onClose,
+  onSuccess,
+}) => {
   const { showToast } = useToast();
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -195,29 +205,27 @@ export const KommoConfigModal: React.FC<KommoConfigModalProps> = ({ isOpen, onCl
 
   useEffect(() => {
     if (isOpen) {
-      fetchConfig();
-    }
-  }, [isOpen]);
-
-  const fetchConfig = async () => {
-    setIsLoading(true);
-    try {
-      const res = await fetch('/api/integrations/kommo');
-      if (res.ok) {
-        const data = await res.json();
-        if (data.id) {
-          setIsActive(data.isActive);
-          setSubdomain(data.config?.subdomain || '');
-          setJourneyStages(data.journeyMap || ['Criado', 'Qualificado', 'Venda']);
+      (async () => {
+        setIsLoading(true);
+        try {
+          const res = await fetch('/api/integrations/kommo');
+          if (res.ok) {
+            const data = await res.json();
+            if (data.id) {
+              setIsActive(data.isActive);
+              setSubdomain(data.config?.subdomain || '');
+              setJourneyStages(data.journeyMap || ['Criado', 'Qualificado', 'Venda']);
+            }
+          }
+        } catch (error) {
+          console.error('Erro ao carregar configurações:', error);
+          showToast('Erro ao carregar configurações.', 'error');
+        } finally {
+          setIsLoading(false);
         }
-      }
-    } catch (error) {
-      console.error("Erro ao carregar configurações:", error);
-      showToast("Erro ao carregar configurações.", "error");
-    } finally {
-      setIsLoading(false);
+      })();
     }
-  };
+  }, [isOpen, showToast]);
 
   const handleSave = async () => {
     setIsSaving(true);
@@ -228,8 +236,8 @@ export const KommoConfigModal: React.FC<KommoConfigModalProps> = ({ isOpen, onCl
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           isActive,
-          journeyMap: journeyStages
-        })
+          journeyMap: journeyStages,
+        }),
       });
 
       if (!res.ok) throw new Error('Falha ao salvar configuração');
@@ -239,17 +247,16 @@ export const KommoConfigModal: React.FC<KommoConfigModalProps> = ({ isOpen, onCl
       const dataRes = await fetch(`/api/integrations/kommo/data?since=${today}&until=${today}`);
 
       if (!dataRes.ok) {
-        console.warn("Configuração salva, mas falha ao testar conexão de dados.");
-        showToast("Configuração salva, mas houve um erro ao testar a conexão.", "error");
+        console.warn('Configuração salva, mas falha ao testar conexão de dados.');
+        showToast('Configuração salva, mas houve um erro ao testar a conexão.', 'error');
       } else {
-        showToast("Integração salva e testada com sucesso!", "success");
+        showToast('Integração salva e testada com sucesso!', 'success');
       }
 
       onSuccess();
       onClose();
-
     } catch (error) {
-      console.error("Erro ao salvar:", error);
+      console.error('Erro ao salvar:', error);
       showToast('Erro ao salvar e testar integração. Verifique o subdomínio.', 'error');
     } finally {
       setIsSaving(false);
@@ -257,7 +264,7 @@ export const KommoConfigModal: React.FC<KommoConfigModalProps> = ({ isOpen, onCl
   };
 
   const handleReset = async () => {
-    if (!confirm("Tem certeza? Isso desativará a integração e voltará para o padrão.")) return;
+    if (!confirm('Tem certeza? Isso desativará a integração e voltará para o padrão.')) return;
 
     setIsActive(false);
     setIsSaving(true);
@@ -267,13 +274,13 @@ export const KommoConfigModal: React.FC<KommoConfigModalProps> = ({ isOpen, onCl
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           isActive: false,
-          journeyMap: journeyStages
-        })
+          journeyMap: journeyStages,
+        }),
       });
       showToast('Integração desativada. Voltando ao padrão.', 'success');
       onSuccess();
       onClose();
-    } catch (error) {
+    } catch {
       showToast('Erro ao resetar integração.', 'error');
     } finally {
       setIsSaving(false);
@@ -316,7 +323,7 @@ export const KommoConfigModal: React.FC<KommoConfigModalProps> = ({ isOpen, onCl
     useSensor(PointerSensor),
     useSensor(KeyboardSensor, {
       coordinateGetter: sortableKeyboardCoordinates,
-    })
+    }),
   );
 
   const handleDragEnd = (event: DragEndEvent) => {
@@ -345,10 +352,15 @@ export const KommoConfigModal: React.FC<KommoConfigModalProps> = ({ isOpen, onCl
             </div>
             <div>
               <h2 className="font-bold text-lg text-foreground">Configurar Kommo CRM</h2>
-              <p className="text-sm text-muted-foreground">Conecte sua conta para sincronizar leads.</p>
+              <p className="text-sm text-muted-foreground">
+                Conecte sua conta para sincronizar leads.
+              </p>
             </div>
           </div>
-          <button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors">
+          <button
+            onClick={onClose}
+            className="text-muted-foreground hover:text-foreground transition-colors"
+          >
             <X size={24} />
           </button>
         </div>
@@ -363,43 +375,59 @@ export const KommoConfigModal: React.FC<KommoConfigModalProps> = ({ isOpen, onCl
               <div className="flex items-center justify-between bg-secondary/20 p-4 rounded-xl border border-border">
                 <span className="text-sm font-medium text-foreground">Status da Integração</span>
                 <div className="flex items-center gap-3">
-                  <span className={`text-sm font-medium ${isActive ? 'text-green-500' : 'text-muted-foreground'}`}>
+                  <span
+                    className={`text-sm font-medium ${isActive ? 'text-green-500' : 'text-muted-foreground'}`}
+                  >
                     {isActive ? 'Ativo' : 'Inativo'}
                   </span>
                   <button
                     onClick={() => setIsActive(!isActive)}
                     className={`w-12 h-6 rounded-full transition-all relative ${isActive ? 'bg-green-500 shadow-[0_0_10px_rgba(34,197,94,0.5)]' : 'bg-secondary'}`}
                   >
-                    <div className={`w-4 h-4 bg-white rounded-full absolute top-1 transition-transform shadow-sm ${isActive ? 'left-7' : 'left-1'}`} />
+                    <div
+                      className={`w-4 h-4 bg-white rounded-full absolute top-1 transition-transform shadow-sm ${isActive ? 'left-7' : 'left-1'}`}
+                    />
                   </button>
                 </div>
               </div>
 
               {/* Subdomínio — gerenciado no portal, só leitura aqui */}
               <div className="space-y-3">
-                <label className="block text-sm font-medium text-foreground">Subdomínio Kommo</label>
+                <label className="block text-sm font-medium text-foreground">
+                  Subdomínio Kommo
+                </label>
                 {subdomain ? (
                   <div className="flex items-center gap-2 p-1 bg-secondary/30 rounded-xl border border-border">
                     <span className="pl-4 text-muted-foreground font-mono">https://</span>
-                    <span className="flex-1 py-2.5 text-foreground font-medium font-mono">{subdomain}</span>
+                    <span className="flex-1 py-2.5 text-foreground font-medium font-mono">
+                      {subdomain}
+                    </span>
                     <span className="pr-4 text-muted-foreground font-mono">.kommo.com</span>
                   </div>
                 ) : (
                   <div className="flex items-center gap-2 p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-xl text-sm text-yellow-600">
                     <AlertTriangle size={16} />
-                    Configure o Kommo no portal primeiro — o subdomínio aparece aqui automaticamente.
+                    Configure o Kommo no portal primeiro — o subdomínio aparece aqui
+                    automaticamente.
                   </div>
                 )}
-                <p className="text-xs text-muted-foreground">Gerenciado no portal, sincronizado a cada login.</p>
+                <p className="text-xs text-muted-foreground">
+                  Gerenciado no portal, sincronizado a cada login.
+                </p>
               </div>
 
               {/* Jornada de Compra */}
               <div className="space-y-4">
                 <div className="flex items-center gap-2">
                   <Layers size={18} className="text-brand-500" />
-                  <label className="block text-sm font-medium text-foreground">Mapeamento da Jornada</label>
+                  <label className="block text-sm font-medium text-foreground">
+                    Mapeamento da Jornada
+                  </label>
                 </div>
-                <p className="text-xs text-muted-foreground">Defina as etapas do funil que deseja rastrear. A ordem define o funil (I, II, III...).</p>
+                <p className="text-xs text-muted-foreground">
+                  Defina as etapas do funil que deseja rastrear. A ordem define o funil (I, II,
+                  III...).
+                </p>
 
                 <div className="space-y-2">
                   <DndContext
@@ -407,10 +435,7 @@ export const KommoConfigModal: React.FC<KommoConfigModalProps> = ({ isOpen, onCl
                     collisionDetection={closestCenter}
                     onDragEnd={handleDragEnd}
                   >
-                    <SortableContext
-                      items={journeyStages}
-                      strategy={verticalListSortingStrategy}
-                    >
+                    <SortableContext items={journeyStages} strategy={verticalListSortingStrategy}>
                       {journeyStages.map((stage, index) => (
                         <SortableStageItem
                           key={stage}

@@ -1,5 +1,5 @@
-import { withAuth } from "next-auth/middleware";
-import { NextResponse } from "next/server";
+import { withAuth } from 'next-auth/middleware';
+import { NextResponse } from 'next/server';
 
 export default withAuth(
   function middleware(req) {
@@ -8,19 +8,19 @@ export default withAuth(
     const path = req.nextUrl.pathname;
 
     if (token) {
-      console.log("[MIDDLEWARE] Path:", path);
-      console.log("[MIDDLEWARE] Token Email:", token.email);
-      console.log("[MIDDLEWARE] Token isProfileComplete:", isProfileComplete);
-      console.log("[MIDDLEWARE] Token Keys:", Object.keys(token));
+      console.log('[MIDDLEWARE] Path:', path);
+      console.log('[MIDDLEWARE] Token Email:', token.email);
+      console.log('[MIDDLEWARE] Token isProfileComplete:', isProfileComplete);
+      console.log('[MIDDLEWARE] Token Keys:', Object.keys(token));
     }
 
     // If user is logged in but profile is incomplete, redirect to complete profile page
     // Avoid redirect loop if already on the complete profile page
-    if (token && !isProfileComplete && path !== "/auth/complete-profile") {
-      return NextResponse.redirect(new URL("/auth/complete-profile", req.url));
+    if (token && !isProfileComplete && path !== '/auth/complete-profile') {
+      return NextResponse.redirect(new URL('/auth/complete-profile', req.url));
     }
 
-    // Removed the redirect to home if profile is complete. 
+    // Removed the redirect to home if profile is complete.
     // We will let the client-side page handle that check to avoid conflicts/loops.
   },
   {
@@ -33,7 +33,7 @@ export default withAuth(
       // stale/deactivated cookie (e.g. right after authorize() rejected a new login).
       authorized: ({ token }) => !!token && token.isActive !== false,
     },
-  }
+  },
 );
 
 export const config = {
@@ -47,6 +47,6 @@ export const config = {
      * - _next/image (image optimization files)
      * - favicon.ico (favicon file)
      */
-    "/((?!auth/login|auth/register|auth/sso|api|legal|_next/static|_next/image|favicon.ico).*)",
+    '/((?!auth/login|auth/register|auth/sso|api|legal|_next/static|_next/image|favicon.ico).*)',
   ],
 };

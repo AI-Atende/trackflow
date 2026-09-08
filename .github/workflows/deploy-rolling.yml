@@ -1,0 +1,76 @@
+name: Rolling deploy to VPS
+
+on:
+  workflow_call:
+    inputs:
+      health_url:
+        description: "URL pública opcional para checagem final pós-deploy (ex: https://seu-dominio.com)"
+        required: false
+        type: string
+        default: ""
+
+jobs:
+  deploy:
+    name: Rolling restart + smoke test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Pull da imagem mais recente na VPS
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_SSH_PORT || 22 }}
+          script: |
+            set -e
+            cd "${{ secrets.VPS_COMPOSE_DIR }}"
+            docker compose pull app1
+
+      - name: Reinicia app1 e aguarda health
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_SSH_PORT || 22 }}
+          script: |
+            set -e
+            cd "${{ secrets.VPS_COMPOSE_DIR }}"
+            docker compose up -d --no-deps app1
+            set -a; [ -f .env ] && source .env; set +a
+            for i in $(seq 1 12); do
+              curl -fsS "http://localhost:${HOST_PORT_APP_1:-3000}/api/health" && echo "app1 OK" && exit 0
+              echo "app1 ainda não saudável, tentativa $i/12"
+              sleep 5
+            done
+            echo "::error::app1 não ficou saudável a tempo"
+            exit 1
+
+      - name: Checagem final via domínio público
+        if: inputs.health_url != ''
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_SSH_PORT || 22 }}
+          script: |
+            curl -fsS "${{ inputs.health_url }}/api/health" && echo "Domínio OK"
+
+  notify-failure:
+    name: Notificar falha
+    needs: deploy
+    if: failure()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Enviar webhook (n8n) via VPS
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_SSH_PORT || 22 }}
+          script: |
+            curl -fsS -X POST "${{ secrets.N8N_DEPLOY_WEBHOOK_URL }}" \
+              -H "Content-Type: application/json" \
+              -d '{"status":"failed","repo":"${{ github.repository }}","run_url":"${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"}'

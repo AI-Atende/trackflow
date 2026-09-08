@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { RefreshCw } from "lucide-react";
+import { RefreshCw } from 'lucide-react';
 import { useToast } from '@/contexts/ToastContext';
 import { format } from 'date-fns';
+import type { Session } from 'next-auth';
 
 type DateRange = {
   from: Date;
@@ -9,7 +10,7 @@ type DateRange = {
 };
 
 interface SyncButtonProps {
-  session: any;
+  session: Session;
   onSyncSuccess?: () => void;
   dateRange: DateRange;
 }
@@ -20,7 +21,7 @@ export const SyncButton = ({ session, onSyncSuccess, dateRange }: SyncButtonProp
 
   const handleSync = async () => {
     if (!session?.user?.metaAdAccount?.adAccountId) {
-      showToast("Nenhuma conta de anúncios vinculada.", "error");
+      showToast('Nenhuma conta de anúncios vinculada.', 'error');
       return;
     }
 
@@ -30,23 +31,23 @@ export const SyncButton = ({ session, onSyncSuccess, dateRange }: SyncButtonProp
       const until = format(dateRange.to, 'yyyy-MM-dd');
 
       const res = await fetch(`/api/meta/${session.user.metaAdAccount.adAccountId}/sync-daily`, {
-        method: "POST",
+        method: 'POST',
         headers: {
-          "Content-Type": "application/json",
+          'Content-Type': 'application/json',
         },
         body: JSON.stringify({ since, until }),
       });
 
       if (res.ok) {
-        showToast("Sincronização iniciada com sucesso!", "success");
+        showToast('Sincronização iniciada com sucesso!', 'success');
         if (onSyncSuccess) onSyncSuccess();
       } else {
         const data = await res.json();
-        showToast(`Erro ao sincronizar: ${data.error || "Erro desconhecido"}`, "error");
+        showToast(`Erro ao sincronizar: ${data.error || 'Erro desconhecido'}`, 'error');
       }
     } catch (error) {
-      console.error("Erro na sincronização:", error);
-      showToast("Erro ao conectar com o servidor.", "error");
+      console.error('Erro na sincronização:', error);
+      showToast('Erro ao conectar com o servidor.', 'error');
     } finally {
       setIsSyncing(false);
     }
@@ -56,10 +57,10 @@ export const SyncButton = ({ session, onSyncSuccess, dateRange }: SyncButtonProp
     <button
       onClick={handleSync}
       disabled={isSyncing}
-      className={`p-2 text-slate-400 hover:text-brand-600 hover:bg-brand-50 rounded-full transition-all relative ${isSyncing ? "opacity-50 cursor-not-allowed" : ""}`}
+      className={`p-2 text-slate-400 hover:text-brand-600 hover:bg-brand-50 rounded-full transition-all relative ${isSyncing ? 'opacity-50 cursor-not-allowed' : ''}`}
       title="Forçar Sincronização"
     >
-      <RefreshCw size={20} className={isSyncing ? "animate-spin" : ""} />
+      <RefreshCw size={20} className={isSyncing ? 'animate-spin' : ''} />
     </button>
   );
 };

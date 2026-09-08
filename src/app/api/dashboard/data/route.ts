@@ -21,8 +21,9 @@ export async function GET(request: Request) {
   try {
     const { campaigns, labels } = await fetchHybridData(session.user.clientId, dataSource, since, until);
     return NextResponse.json({ campaigns, labels });
-  } catch (error: any) {
+  } catch (error) {
     console.error("Dashboard Data Error:", error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    const message = error instanceof Error ? error.message : "Unknown error";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

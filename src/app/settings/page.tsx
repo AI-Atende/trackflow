@@ -1,11 +1,11 @@
-"use client";
+'use client';
 
 import React, { useState } from 'react';
-import { useSession } from "next-auth/react";
-import { useRouter } from "next/navigation";
-import { Target, Share2, UserPlus, ChevronRight, Menu, Moon, Sun } from "lucide-react";
-import { Sidebar } from "@/components/Sidebar";
-import { useTheme } from "@/contexts/ThemeContext";
+import { useSession } from 'next-auth/react';
+import { useRouter } from 'next/navigation';
+import { Target, Share2, UserPlus, ChevronRight, Menu, Moon, Sun } from 'lucide-react';
+import { Sidebar } from '@/components/Sidebar';
+import { useTheme } from '@/contexts/ThemeContext';
 
 export default function SettingsHubPage() {
   const { data: session, status } = useSession();
@@ -13,34 +13,34 @@ export default function SettingsHubPage() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const { theme, toggleTheme } = useTheme();
 
-  if (status === "loading") {
+  if (status === 'loading') {
     return <div className="flex items-center justify-center min-h-screen">Carregando...</div>;
   }
 
-  if (status === "unauthenticated") {
-    router.push("/auth/login");
+  if (status === 'unauthenticated') {
+    router.push('/auth/login');
     return null;
   }
 
   const settingsOptions = [
     {
-      title: "Metas",
-      description: "Defina metas de ROAS, Receita e CPA por etapa.",
+      title: 'Metas',
+      description: 'Defina metas de ROAS, Receita e CPA por etapa.',
       icon: <Target className="text-brand-500" size={24} />,
-      href: "/settings/goals"
+      href: '/settings/goals',
     },
     {
-      title: "Integrações",
-      description: "Gerencie conexões com Kommo, Meta Ads e outras ferramentas.",
+      title: 'Integrações',
+      description: 'Gerencie conexões com Kommo, Meta Ads e outras ferramentas.',
       icon: <Share2 className="text-blue-500" size={24} />,
-      href: "/integrations"
+      href: '/integrations',
     },
     {
-      title: "Compartilhamento",
-      description: "Gerencie o acesso e compartilhamento da conta.",
+      title: 'Compartilhamento',
+      description: 'Gerencie o acesso e compartilhamento da conta.',
       icon: <UserPlus className="text-purple-500" size={24} />,
-      href: "/sharing"
-    }
+      href: '/sharing',
+    },
   ];
 
   return (
@@ -48,9 +48,13 @@ export default function SettingsHubPage() {
       <Sidebar
         isOpen={isMobileMenuOpen}
         onClose={() => setIsMobileMenuOpen(false)}
-        currentAccount={{ id: session?.user?.clientId || '', name: session?.user?.name || '', image: session?.user?.image }}
+        currentAccount={{
+          id: session?.user?.clientId || '',
+          name: session?.user?.name || '',
+          image: session?.user?.image,
+        }}
         availableAccounts={[]}
-        onAccountChange={() => { }}
+        onAccountChange={() => {}}
       />
 
       <main className="flex-1 flex flex-col h-screen relative overflow-hidden">
@@ -69,20 +73,30 @@ export default function SettingsHubPage() {
         <div className="flex-1 overflow-y-auto p-6 md:p-8 space-y-8 bg-background">
           <div className="max-w-4xl mx-auto space-y-8">
             <div className="mb-8">
-              <h2 className="text-2xl font-bold text-foreground tracking-tight">Central de Configurações</h2>
-              <p className="text-muted-foreground">Gerencie todos os aspectos da sua conta e integrações.</p>
+              <h2 className="text-2xl font-bold text-foreground tracking-tight">
+                Central de Configurações
+              </h2>
+              <p className="text-muted-foreground">
+                Gerencie todos os aspectos da sua conta e integrações.
+              </p>
             </div>
 
             {/* Appearance Section */}
             <section className="bg-card border border-border rounded-2xl p-6 mb-8">
               <h3 className="text-lg font-bold text-foreground mb-4 flex items-center gap-2">
-                {theme === 'dark' ? <Moon size={20} className="text-purple-400" /> : <Sun size={20} className="text-yellow-500" />}
+                {theme === 'dark' ? (
+                  <Moon size={20} className="text-purple-400" />
+                ) : (
+                  <Sun size={20} className="text-yellow-500" />
+                )}
                 Aparência
               </h3>
               <div className="flex items-center justify-between">
                 <div>
                   <p className="font-medium text-foreground">Tema do Sistema</p>
-                  <p className="text-sm text-muted-foreground">Alternar entre modo claro e escuro.</p>
+                  <p className="text-sm text-muted-foreground">
+                    Alternar entre modo claro e escuro.
+                  </p>
                 </div>
                 <div className="flex items-center gap-3 bg-secondary/50 p-1 rounded-lg">
                   <button
@@ -114,9 +128,7 @@ export default function SettingsHubPage() {
                   <h3 className="text-lg font-bold text-foreground mb-2 group-hover:text-brand-500 transition-colors">
                     {option.title}
                   </h3>
-                  <p className="text-sm text-muted-foreground mb-4 flex-1">
-                    {option.description}
-                  </p>
+                  <p className="text-sm text-muted-foreground mb-4 flex-1">{option.description}</p>
                   <div className="flex items-center text-sm font-medium text-brand-500 opacity-0 group-hover:opacity-100 transition-opacity transform translate-x-[-10px] group-hover:translate-x-0">
                     Acessar <ChevronRight size={16} className="ml-1" />
                   </div>

@@ -1,4 +1,4 @@
-import { AdCampaign, CampaignHierarchy } from "@/types";
+import { AdCampaign, CampaignHierarchy } from '@/types';
 
 interface KommoResponse {
   campaigns: {
@@ -21,30 +21,49 @@ interface KommoResponse {
   }[];
 }
 
-async function fetchWithRetry(url: string, options: RequestInit, retries = 3, backoff = 1000): Promise<Response> {
+async function fetchWithRetry(
+  url: string,
+  options: RequestInit,
+  retries = 3,
+  backoff = 1000,
+): Promise<Response> {
   const requestId = Math.random().toString(36).substring(7);
   try {
     const res = await fetch(url, options);
-    let errorBody = "";
+    let errorBody = '';
 
     if (!res.ok) {
       try {
         errorBody = await res.text();
-      } catch (e) {
-        errorBody = "Could not read error body";
+      } catch {
+        errorBody = 'Could not read error body';
       }
 
-      console.error(`[KommoReq:${requestId}] Error ${res.status}: ${res.statusText} at ${url}. Body: ${errorBody.substring(0, 500)}`);
+      console.error(
+        `[KommoReq:${requestId}] Error ${res.status}: ${res.statusText} at ${url}. Body: ${errorBody.substring(0, 500)}`,
+      );
 
       // Detect 401 in body even if status is 500
-      const isUnauthorized = res.status === 401 || errorBody.includes("401") || errorBody.toLowerCase().includes("unauthorized");
+      const isUnauthorized =
+        res.status === 401 ||
+        errorBody.includes('401') ||
+        errorBody.toLowerCase().includes('unauthorized');
 
       if (isUnauthorized) {
-        throw new Error(`KOMMO_AUTH_ERROR: Falha de autenticação no Kommo para este subdomínio. Reautorize a integração.`);
+        throw new Error(
+          `KOMMO_AUTH_ERROR: Falha de autenticação no Kommo para este subdomínio. Reautorize a integração.`,
+        );
       }
 
-      if (retries > 0 && (res.status === 500 || res.status === 502 || res.status === 503 || res.status === 504 || res.status === 429)) {
-        await new Promise(resolve => setTimeout(resolve, backoff));
+      if (
+        retries > 0 &&
+        (res.status === 500 ||
+          res.status === 502 ||
+          res.status === 503 ||
+          res.status === 504 ||
+          res.status === 429)
+      ) {
+        await new Promise((resolve) => setTimeout(resolve, backoff));
         return fetchWithRetry(url, options, retries - 1, backoff * 2);
       }
       throw new Error(`Erro na requisição: ${res.status} ${res.statusText}`);
@@ -52,13 +71,15 @@ async function fetchWithRetry(url: string, options: RequestInit, retries = 3, ba
     return res;
   } catch (error) {
     // Re-throw if it's already our specialized auth error
-    if (error instanceof Error && error.message.includes("KOMMO_AUTH_ERROR")) {
+    if (error instanceof Error && error.message.includes('KOMMO_AUTH_ERROR')) {
       throw error;
     }
 
     if (retries > 0) {
-      console.warn(`[KommoReq:${requestId}] Retry attempt ${4 - retries} due to error: ${error instanceof Error ? error.message : 'Unknown'}`);
-      await new Promise(resolve => setTimeout(resolve, backoff));
+      console.warn(
+        `[KommoReq:${requestId}] Retry attempt ${4 - retries} due to error: ${error instanceof Error ? error.message : 'Unknown'}`,
+      );
+      await new Promise((resolve) => setTimeout(resolve, backoff));
       return fetchWithRetry(url, options, retries - 1, backoff * 2);
     }
     throw error;
@@ -68,27 +89,27 @@ async function fetchWithRetry(url: string, options: RequestInit, retries = 3, ba
 export async function fetchKommoData(
   subdomain: string,
   journeyStages: string[],
-  dateRange?: { from: Date; to: Date }
+  dateRange?: { from: Date; to: Date },
 ): Promise<AdCampaign[]> {
   // Construir URL com parâmetros
-  const url = new URL("https://aiatende.dev.br/kommo/api/kommo-leads/aggregated-utm");
-  url.searchParams.set("subdomain", subdomain);
+  const url = new URL('https://aiatende.dev.br/kommo/api/kommo-leads/aggregated-utm');
+  url.searchParams.set('subdomain', subdomain);
 
   // Adicionar estágios da jornada como repeated params
-  journeyStages.forEach(stage => {
-    url.searchParams.append("lead_journey", stage);
+  journeyStages.forEach((stage) => {
+    url.searchParams.append('lead_journey', stage);
   });
 
   if (dateRange) {
     const fromSeconds = Math.floor(dateRange.from.getTime() / 1000);
     const toSeconds = Math.floor(dateRange.to.getTime() / 1000);
 
-    url.searchParams.set("created_at_from", fromSeconds.toString());
-    url.searchParams.set("created_at_to", toSeconds.toString());
+    url.searchParams.set('created_at_from', fromSeconds.toString());
+    url.searchParams.set('created_at_to', toSeconds.toString());
   }
 
   const res = await fetchWithRetry(url.toString(), {
-    method: "GET"
+    method: 'GET',
   });
 
   const data: KommoResponse = await res.json();
@@ -111,7 +132,7 @@ export async function fetchKommoData(
       stage5: 0,
 
       revenue: 0,
-      ghostLeads: 0
+      ghostLeads: 0,
     };
 
     // Iterar sobre grupos e anúncios para somar
@@ -151,7 +172,7 @@ export async function fetchKommoData(
     campaigns.push({
       id: `kommo-camp-${campIndex}`,
       name: camp.campaign,
-      status: "active",
+      status: 'active',
       data: {
         stage1: campaignTotals.stage1,
         stage2: campaignTotals.stage2,
@@ -161,7 +182,7 @@ export async function fetchKommoData(
       },
       // Fixed syntax error
       revenue: campaignTotals.revenue,
-      ghostLeads: campaignTotals.ghostLeads
+      ghostLeads: campaignTotals.ghostLeads,
     });
   });
 
@@ -171,21 +192,21 @@ export async function fetchKommoData(
 export async function fetchKommoHierarchy(
   subdomain: string,
   journeyStages: string[],
-  dateRange?: { from: Date; to: Date }
+  dateRange?: { from: Date; to: Date },
 ): Promise<CampaignHierarchy[]> {
-  const url = new URL("https://aiatende.dev.br/kommo/api/kommo-leads/aggregated-utm");
-  url.searchParams.set("subdomain", subdomain);
-  journeyStages.forEach(stage => url.searchParams.append("lead_journey", stage));
+  const url = new URL('https://aiatende.dev.br/kommo/api/kommo-leads/aggregated-utm');
+  url.searchParams.set('subdomain', subdomain);
+  journeyStages.forEach((stage) => url.searchParams.append('lead_journey', stage));
 
   if (dateRange) {
     const fromSeconds = Math.floor(dateRange.from.getTime() / 1000);
     const toSeconds = Math.floor(dateRange.to.getTime() / 1000);
-    url.searchParams.set("created_at_from", fromSeconds.toString());
-    url.searchParams.set("created_at_to", toSeconds.toString());
+    url.searchParams.set('created_at_from', fromSeconds.toString());
+    url.searchParams.set('created_at_to', toSeconds.toString());
   }
 
   const res = await fetchWithRetry(url.toString(), {
-    method: "GET"
+    method: 'GET',
   });
 
   const data: KommoResponse = await res.json();
@@ -208,7 +229,7 @@ export async function fetchKommoHierarchy(
 
       revenue: 0,
       ghostLeads: 0,
-      children: []
+      children: [],
     };
 
     camp.groups.forEach((group, groupIndex) => {
@@ -219,7 +240,7 @@ export async function fetchKommoHierarchy(
 
       const adSetNode: CampaignHierarchy = {
         id: `kommo-adset-${campIndex}-${groupIndex}`,
-        name: group.medium || "Sem Grupo",
+        name: group.medium || 'Sem Grupo',
         type: 'adset',
         status: 'active',
         data: { stage1: 0, stage2: 0, stage3: 0, stage4: 0, stage5: 0 },
@@ -228,7 +249,7 @@ export async function fetchKommoHierarchy(
 
         revenue: 0,
         ghostLeads: 0,
-        children: []
+        children: [],
       };
 
       group.ads.forEach((ad, adIndex) => {
@@ -239,7 +260,7 @@ export async function fetchKommoHierarchy(
 
         const adNode: CampaignHierarchy = {
           id: `kommo-ad-${campIndex}-${groupIndex}-${adIndex}`,
-          name: ad.content || "Anúncio Sem Nome",
+          name: ad.content || 'Anúncio Sem Nome',
           type: 'ad',
           status: 'active',
           data: { stage1: 0, stage2: 0, stage3: 0, stage4: 0, stage5: 0 },
@@ -247,7 +268,7 @@ export async function fetchKommoHierarchy(
           roas: 0,
 
           revenue: 0,
-          ghostLeads: 0
+          ghostLeads: 0,
         };
 
         // Calcular métricas do anúncio

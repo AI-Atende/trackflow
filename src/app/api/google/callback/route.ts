@@ -1,21 +1,21 @@
-import { exchangeCodeForTokens, listAccessibleCustomers } from "@/services/googleService";
-import { prisma } from "@/lib/prisma";
-import { NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+import { exchangeCodeForTokens, listAccessibleCustomers } from '@/services/googleService';
+import { prisma } from '@/lib/prisma';
+import { NextResponse } from 'next/server';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/lib/auth';
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
-  const code = searchParams.get("code");
-  const state = searchParams.get("state"); // Should be clientId if passed, or we use session
-  const error = searchParams.get("error");
+  const code = searchParams.get('code');
+  const state = searchParams.get('state'); // Should be clientId if passed, or we use session
+  const error = searchParams.get('error');
 
   if (error) {
     return NextResponse.json({ error }, { status: 400 });
   }
 
   if (!code) {
-    return NextResponse.json({ error: "Missing code" }, { status: 400 });
+    return NextResponse.json({ error: 'Missing code' }, { status: 400 });
   }
 
   try {
@@ -26,7 +26,7 @@ export async function GET(request: Request) {
     if (!tokens.refresh_token) {
       // If user re-auths without prompt=consent, refresh_token might be missing.
       // We should probably warn or handle this.
-      console.warn("Missing refresh_token. User might need to revoke access to get a new one.");
+      console.warn('Missing refresh_token. User might need to revoke access to get a new one.');
     }
 
     // 2. Identify User
@@ -41,14 +41,17 @@ export async function GET(request: Request) {
     }
 
     if (!clientId) {
-      return NextResponse.json({ error: "User not authenticated" }, { status: 401 });
+      return NextResponse.json({ error: 'User not authenticated' }, { status: 401 });
     }
 
     // 3. Get Accessible Customers
     const customers = await listAccessibleCustomers(tokens.access_token);
 
     if (!customers || customers.length === 0) {
-      return NextResponse.json({ error: "No Google Ads accounts found for this user." }, { status: 404 });
+      return NextResponse.json(
+        { error: 'No Google Ads accounts found for this user.' },
+        { status: 404 },
+      );
     }
 
     // 4. Save to DB
@@ -56,14 +59,14 @@ export async function GET(request: Request) {
     // Let's create the first one found.
     // Resource name format: "customers/123-456-7890"
     const customerResourceName = customers[0];
-    const customerId = customerResourceName.replace("customers/", "");
+    const customerId = customerResourceName.replace('customers/', '');
 
     // Check if exists
     const existing = await prisma.googleAdAccount.findFirst({
       where: {
         clientId,
-        customerId
-      }
+        customerId,
+      },
     });
 
     if (existing) {
@@ -73,12 +76,15 @@ export async function GET(request: Request) {
           accessToken: tokens.access_token,
           refreshToken: tokens.refresh_token || existing.refreshToken, // Keep old if not provided
           tokenExpiresAt: new Date(Date.now() + tokens.expires_in * 1000),
-          status: 'ACTIVE'
-        }
+          status: 'ACTIVE',
+        },
       });
     } else {
       if (!tokens.refresh_token) {
-        return NextResponse.json({ error: "Missing refresh token for new account. Please revoke access and try again." }, { status: 400 });
+        return NextResponse.json(
+          { error: 'Missing refresh token for new account. Please revoke access and try again.' },
+          { status: 400 },
+        );
       }
       await prisma.googleAdAccount.create({
         data: {
@@ -88,16 +94,16 @@ export async function GET(request: Request) {
           accessToken: tokens.access_token,
           refreshToken: tokens.refresh_token,
           tokenExpiresAt: new Date(Date.now() + tokens.expires_in * 1000),
-          status: 'ACTIVE'
-        }
+          status: 'ACTIVE',
+        },
       });
     }
 
     // Redirect back to settings
-    return NextResponse.redirect(new URL("/settings/integrations?success=google", request.url));
-
-  } catch (e: any) {
-    console.error("Google Callback Error:", e);
-    return NextResponse.json({ error: e.message }, { status: 500 });
+    return NextResponse.redirect(new URL('/settings/integrations?success=google', request.url));
+  } catch (e) {
+    console.error('Google Callback Error:', e);
+    const message = e instanceof Error ? e.message : 'Unknown error';
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

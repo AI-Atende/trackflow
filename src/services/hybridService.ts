@@ -1,10 +1,11 @@
-import { prisma } from "@/lib/prisma";
-import { CampaignHierarchy } from "@/types";
-import { fetchKommoHierarchy } from "./kommoService";
-import { fetchMetaHierarchy } from "./metaService";
-import { fetchGoogleHierarchy } from "./googleService";
+import { prisma } from '@/lib/prisma';
+import { CampaignHierarchy } from '@/types';
+import { fetchKommoHierarchy } from './kommoService';
+import { fetchMetaHierarchy } from './metaService';
+import { fetchGoogleHierarchy } from './googleService';
 
-export type DataSourceType = 'KOMMO' | 'META' | 'GOOGLE' | 'HYBRID_META' | 'HYBRID_GOOGLE' | 'HYBRID_ALL';
+export type DataSourceType =
+  'KOMMO' | 'META' | 'GOOGLE' | 'HYBRID_META' | 'HYBRID_GOOGLE' | 'HYBRID_ALL';
 
 export async function getAvailableDataSources(clientId: string): Promise<DataSourceType[]> {
   const client = await prisma.client.findUnique({
@@ -13,14 +14,14 @@ export async function getAvailableDataSources(clientId: string): Promise<DataSou
       integrations: true,
       metaAdAccounts: true,
       googleAdAccounts: true,
-    }
+    },
   });
 
   if (!client) return [];
 
-  const hasKommo = client.integrations.some(i => i.provider === 'KOMMO' && i.isActive);
-  const hasMeta = client.metaAdAccounts.some(a => a.status === 'ACTIVE');
-  const hasGoogle = client.googleAdAccounts.some(a => a.status === 'ACTIVE');
+  const hasKommo = client.integrations.some((i) => i.provider === 'KOMMO' && i.isActive);
+  const hasMeta = client.metaAdAccounts.some((a) => a.status === 'ACTIVE');
+  const hasGoogle = client.googleAdAccounts.some((a) => a.status === 'ACTIVE');
 
   const sources: DataSourceType[] = [];
 
@@ -39,45 +40,47 @@ export async function fetchHybridData(
   clientId: string,
   type: DataSourceType,
   since: string,
-  until: string
-): Promise<{ campaigns: CampaignHierarchy[], labels: string[] }> {
+  until: string,
+): Promise<{ campaigns: CampaignHierarchy[]; labels: string[] }> {
   const client = await prisma.client.findUnique({
     where: { id: clientId },
     include: {
       integrations: true,
       metaAdAccounts: true,
       googleAdAccounts: true,
-    }
+    },
   });
 
   if (!client) return { campaigns: [], labels: [] };
 
-  const kommoConfig = client.integrations.find(i => i.provider === 'KOMMO');
-  const metaAccount = client.metaAdAccounts.find(a => a.status === 'ACTIVE'); // Use active account
-  const googleAccount = client.googleAdAccounts.find(a => a.status === 'ACTIVE'); // Use active account
+  const kommoConfig = client.integrations.find((i) => i.provider === 'KOMMO');
+  const metaAccount = client.metaAdAccounts.find((a) => a.status === 'ACTIVE'); // Use active account
+  const googleAccount = client.googleAdAccounts.find((a) => a.status === 'ACTIVE'); // Use active account
 
   let kommoData: CampaignHierarchy[] = [];
   let metaData: CampaignHierarchy[] = [];
   let googleData: CampaignHierarchy[] = [];
-  let labels: string[] = ["Impressões", "Cliques", "Leads", "Vendas", "Receita"]; // Default fallback
+  let labels: string[] = ['Impressões', 'Cliques', 'Leads', 'Vendas', 'Receita']; // Default fallback
 
   const dateRange = { from: new Date(since), to: new Date(until) };
 
   // Fetch necessary data based on type
   if (type.includes('KOMMO') || type.includes('HYBRID')) {
     if (kommoConfig?.config) {
-      const config = kommoConfig.config as any;
+      const config = kommoConfig.config as { subdomain?: string };
       const journeyMap = (kommoConfig.journeyMap as string[]) || [];
       if (journeyMap.length > 0) labels = journeyMap;
-      kommoData = await fetchKommoHierarchy(config.subdomain, journeyMap, dateRange);
+      if (config.subdomain) {
+        kommoData = await fetchKommoHierarchy(config.subdomain, journeyMap, dateRange);
+      }
     }
   }
 
   if (type === 'META') {
     // If only META, use Meta defaults or config if we had one
-    labels = ["Impressões", "Cliques", "Leads", "Alcance", "Resultados"];
+    labels = ['Impressões', 'Cliques', 'Leads', 'Alcance', 'Resultados'];
   } else if (type === 'GOOGLE') {
-    labels = ["Impressões", "Cliques", "Conversões", "Custo", "Valor Conv."];
+    labels = ['Impressões', 'Cliques', 'Conversões', 'Custo', 'Valor Conv.'];
   }
 
   if (type.includes('META') || type === 'HYBRID_META' || type === 'HYBRID_ALL') {
@@ -114,7 +117,7 @@ export async function fetchHybridData(
 function mergeData(
   kommo: CampaignHierarchy[],
   meta: CampaignHierarchy[],
-  google: CampaignHierarchy[]
+  google: CampaignHierarchy[],
 ): CampaignHierarchy[] {
   // Map to hold merged campaigns
   const mergedMap = new Map<string, CampaignHierarchy>();
@@ -127,7 +130,7 @@ function mergeData(
   // 1. Process Ad Platforms (Meta & Google) first as the "Base" structure for Spend/Impressions
   // They are the source of truth for "Spending"
 
-  const processPlatformData = (items: CampaignHierarchy[], platform: 'meta' | 'google') => {
+  const processPlatformData = (items: CampaignHierarchy[]) => {
     for (const item of items) {
       const key = item.name.trim(); // Match by Name
       if (!mergedMap.has(key)) {
@@ -149,8 +152,8 @@ function mergeData(
     }
   };
 
-  processPlatformData(meta, 'meta');
-  processPlatformData(google, 'google');
+  processPlatformData(meta);
+  processPlatformData(google);
 
   // 2. Process Kommo Data (Source of truth for Results/Sales)
   for (const kItem of kommo) {
@@ -180,7 +183,7 @@ function mergeData(
 
 function mergeChildren(
   baseChildren: CampaignHierarchy[],
-  kommoChildren: CampaignHierarchy[]
+  kommoChildren: CampaignHierarchy[],
 ): CampaignHierarchy[] {
   const map = new Map<string, CampaignHierarchy>();
 

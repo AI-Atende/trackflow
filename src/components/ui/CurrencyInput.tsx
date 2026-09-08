@@ -7,7 +7,12 @@ interface CurrencyInputProps {
   placeholder?: string;
 }
 
-export const CurrencyInput: React.FC<CurrencyInputProps> = ({ value, onChange, className, placeholder }) => {
+export const CurrencyInput: React.FC<CurrencyInputProps> = ({
+  value,
+  onChange,
+  className,
+  placeholder,
+}) => {
   const formatCurrency = (val: number) => {
     return new Intl.NumberFormat('pt-BR', {
       style: 'currency',

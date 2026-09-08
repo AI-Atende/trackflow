@@ -1,9 +1,13 @@
-import { prisma } from "@/lib/prisma";
+import { prisma } from '@/lib/prisma';
 
-export async function fetchMetaCampaigns(adAccountId: string, since: string, until: string) {
+export async function fetchMetaCampaigns(
+  adAccountId: string,
+  since: string,
+  until: string,
+): Promise<AdCampaign[]> {
   const metaAccount = await prisma.metaAdAccount.findFirst({
     where: { adAccountId },
-    include: { client: { include: { integrations: true } } }
+    include: { client: { include: { integrations: true } } },
   });
 
   if (!metaAccount) {
@@ -11,7 +15,7 @@ export async function fetchMetaCampaigns(adAccountId: string, since: string, unt
   }
 
   // Get Meta Config
-  const metaConfig = metaAccount.client.integrations.find(i => i.provider === 'META');
+  const metaConfig = metaAccount.client.integrations.find((i) => i.provider === 'META');
   const journeyMap = (metaConfig?.journeyMap as string[]) || ['impressions', 'clicks', 'leads'];
 
   const sinceDate = since.includes('T') ? new Date(since) : new Date(`${since}T00:00:00.000Z`);
@@ -59,29 +63,40 @@ export async function fetchMetaCampaigns(adAccountId: string, since: string, unt
       existing.totalImpressions += row.impressions;
       existing.totalClicks += row.clicks;
       existing.totalLeads += row.leads;
-      existing.totalReach += (row.reach || 0);
-      existing.totalResults += (row.results || 0);
+      existing.totalReach += row.reach || 0;
+      existing.totalResults += row.results || 0;
     }
   }
 
   const calculateMetric = (metric: string, data: CampaignSummary) => {
     switch (metric) {
-      case 'impressions': return data.totalImpressions;
-      case 'clicks': return data.totalClicks;
-      case 'leads': return data.totalLeads;
-      case 'reach': return data.totalReach;
-      case 'results': return data.totalResults;
-      case 'spend': return data.totalSpend;
-      case 'ctr': return data.totalImpressions > 0 ? (data.totalClicks / data.totalImpressions) * 100 : 0;
-      case 'cpc': return data.totalClicks > 0 ? data.totalSpend / data.totalClicks : 0;
-      case 'cpm': return data.totalImpressions > 0 ? (data.totalSpend / data.totalImpressions) * 1000 : 0;
-      case 'cpa': return data.totalLeads > 0 ? data.totalSpend / data.totalLeads : 0;
-      default: return 0;
+      case 'impressions':
+        return data.totalImpressions;
+      case 'clicks':
+        return data.totalClicks;
+      case 'leads':
+        return data.totalLeads;
+      case 'reach':
+        return data.totalReach;
+      case 'results':
+        return data.totalResults;
+      case 'spend':
+        return data.totalSpend;
+      case 'ctr':
+        return data.totalImpressions > 0 ? (data.totalClicks / data.totalImpressions) * 100 : 0;
+      case 'cpc':
+        return data.totalClicks > 0 ? data.totalSpend / data.totalClicks : 0;
+      case 'cpm':
+        return data.totalImpressions > 0 ? (data.totalSpend / data.totalImpressions) * 1000 : 0;
+      case 'cpa':
+        return data.totalLeads > 0 ? data.totalSpend / data.totalLeads : 0;
+      default:
+        return 0;
     }
   };
 
-  return Array.from(map.values()).map(c => {
-    const stageValues = journeyMap.map(metric => calculateMetric(metric, c));
+  return Array.from(map.values()).map((c) => {
+    const stageValues = journeyMap.map((metric) => calculateMetric(metric, c));
 
     // Last configured stage is the "Result" (metaLeads)
     const resultMetric = journeyMap[journeyMap.length - 1];
@@ -96,29 +111,37 @@ export async function fetchMetaCampaigns(adAccountId: string, since: string, unt
         stage2: stageValues[1] || 0,
         stage3: stageValues[2] || 0,
         stage4: stageValues[3] || 0,
-        stage5: stageValues[4] || 0
+        stage5: stageValues[4] || 0,
       },
       spend: c.totalSpend,
       roas: 0,
       revenue: 0,
-      metaLeads: resultValue
+      metaLeads: resultValue,
     };
   });
 }
 
-import { metaGet } from "@/lib/meta/client";
-import { CampaignHierarchy } from "@/types";
+import { metaGet } from '@/lib/meta/client';
+import { AdCampaign, CampaignHierarchy } from '@/types';
 
 // Helper to fetch all pages
-async function fetchAllMetaItems<T>(path: string, accessToken: string, params: any = {}): Promise<T[]> {
+async function fetchAllMetaItems<T>(
+  path: string,
+  accessToken: string,
+  params: Record<string, string | number | boolean | undefined> = {},
+): Promise<T[]> {
   let allItems: T[] = [];
-  let currentPath = path;
+  const currentPath = path;
   let currentParams = params;
   let hasNext = true;
 
   while (hasNext) {
     try {
-      const res = await metaGet<{ data: T[], paging?: { next?: string } }>(currentPath, accessToken, currentParams);
+      const res = await metaGet<{ data: T[]; paging?: { next?: string } }>(
+        currentPath,
+        accessToken,
+        currentParams,
+      );
       if (res.data) {
         allItems = [...allItems, ...res.data];
       }
@@ -146,17 +169,21 @@ async function fetchAllMetaItems<T>(path: string, accessToken: string, params: a
         hasNext = false;
       }
     } catch (e) {
-      console.error("Error fetching meta items page:", e);
+      console.error('Error fetching meta items page:', e);
       hasNext = false;
     }
   }
   return allItems;
 }
 
-export async function fetchMetaHierarchy(adAccountId: string, since: string, until: string): Promise<CampaignHierarchy[]> {
+export async function fetchMetaHierarchy(
+  adAccountId: string,
+  since: string,
+  until: string,
+): Promise<CampaignHierarchy[]> {
   const metaAccount = await prisma.metaAdAccount.findFirst({
     where: { adAccountId },
-    include: { client: { include: { integrations: true } } }
+    include: { client: { include: { integrations: true } } },
   });
 
   if (!metaAccount) {
@@ -164,7 +191,7 @@ export async function fetchMetaHierarchy(adAccountId: string, since: string, unt
   }
 
   // Get Meta Config
-  const metaConfig = metaAccount.client.integrations.find(i => i.provider === 'META');
+  const metaConfig = metaAccount.client.integrations.find((i) => i.provider === 'META');
   const journeyMap = (metaConfig?.journeyMap as string[]) || ['impressions', 'clicks', 'leads'];
 
   const sinceDate = since.includes('T') ? new Date(since) : new Date(`${since}T00:00:00.000Z`);
@@ -183,26 +210,47 @@ export async function fetchMetaHierarchy(adAccountId: string, since: string, unt
 
   // 2. Fetch Structure from API (Source of Truth for Existence & Status)
   // We fetch ALL items to ensure we show paused/inactive ones too.
-  type MetaApiCampaign = { id: string; name: string; status: string; effective_status: string; };
-  type MetaApiAdSet = { id: string; name: string; status: string; effective_status: string; campaign_id: string; };
-  type MetaApiAd = { id: string; name: string; status: string; effective_status: string; adset_id: string; };
+  type MetaApiCampaign = { id: string; name: string; status: string; effective_status: string };
+  type MetaApiAdSet = {
+    id: string;
+    name: string;
+    status: string;
+    effective_status: string;
+    campaign_id: string;
+  };
+  type MetaApiAd = {
+    id: string;
+    name: string;
+    status: string;
+    effective_status: string;
+    adset_id: string;
+  };
 
   let apiCampaigns: MetaApiCampaign[] = [];
   let apiAdSets: MetaApiAdSet[] = [];
   let apiAds: MetaApiAd[] = [];
 
   try {
-    const fields = "id,name,status,effective_status";
+    const fields = 'id,name,status,effective_status';
     const [camps, adsets, ads] = await Promise.all([
-      fetchAllMetaItems<MetaApiCampaign>(`/${adAccountId}/campaigns`, metaAccount.accessToken, { fields, limit: 500 }),
-      fetchAllMetaItems<MetaApiAdSet>(`/${adAccountId}/adsets`, metaAccount.accessToken, { fields: `${fields},campaign_id`, limit: 500 }),
-      fetchAllMetaItems<MetaApiAd>(`/${adAccountId}/ads`, metaAccount.accessToken, { fields: `${fields},adset_id`, limit: 500 })
+      fetchAllMetaItems<MetaApiCampaign>(`/${adAccountId}/campaigns`, metaAccount.accessToken, {
+        fields,
+        limit: 500,
+      }),
+      fetchAllMetaItems<MetaApiAdSet>(`/${adAccountId}/adsets`, metaAccount.accessToken, {
+        fields: `${fields},campaign_id`,
+        limit: 500,
+      }),
+      fetchAllMetaItems<MetaApiAd>(`/${adAccountId}/ads`, metaAccount.accessToken, {
+        fields: `${fields},adset_id`,
+        limit: 500,
+      }),
     ]);
     apiCampaigns = camps;
     apiAdSets = adsets;
     apiAds = ads;
   } catch (error) {
-    console.error("Error fetching Meta structure from API:", error);
+    console.error('Error fetching Meta structure from API:', error);
     // Fallback? If API fails, we might return empty or rely on DB rows only (old behavior).
     // For now, let's proceed with empty structure and let the DB row fallback handle it (if we implement it).
   }
@@ -228,17 +276,28 @@ export async function fetchMetaHierarchy(adAccountId: string, since: string, unt
 
   const calculateMetric = (metric: string, data: AggregatedData) => {
     switch (metric) {
-      case 'impressions': return data.impressions;
-      case 'clicks': return data.clicks;
-      case 'leads': return data.leads;
-      case 'reach': return data.reach;
-      case 'results': return data.results;
-      case 'spend': return data.spend;
-      case 'ctr': return data.impressions > 0 ? (data.clicks / data.impressions) * 100 : 0;
-      case 'cpc': return data.clicks > 0 ? data.spend / data.clicks : 0;
-      case 'cpm': return data.impressions > 0 ? (data.spend / data.impressions) * 1000 : 0;
-      case 'cpa': return data.leads > 0 ? data.spend / data.leads : 0;
-      default: return 0;
+      case 'impressions':
+        return data.impressions;
+      case 'clicks':
+        return data.clicks;
+      case 'leads':
+        return data.leads;
+      case 'reach':
+        return data.reach;
+      case 'results':
+        return data.results;
+      case 'spend':
+        return data.spend;
+      case 'ctr':
+        return data.impressions > 0 ? (data.clicks / data.impressions) * 100 : 0;
+      case 'cpc':
+        return data.clicks > 0 ? data.spend / data.clicks : 0;
+      case 'cpm':
+        return data.impressions > 0 ? (data.spend / data.impressions) * 1000 : 0;
+      case 'cpa':
+        return data.leads > 0 ? data.spend / data.leads : 0;
+      default:
+        return 0;
     }
   };
 
@@ -253,7 +312,14 @@ export async function fetchMetaHierarchy(adAccountId: string, since: string, unt
 
   // Aggregate DB metrics
   for (const row of rows) {
-    const metrics = { spend: row.spend, impressions: row.impressions, clicks: row.clicks, leads: row.leads, reach: row.reach || 0, results: row.results || 0 };
+    const metrics = {
+      spend: row.spend,
+      impressions: row.impressions,
+      clicks: row.clicks,
+      leads: row.leads,
+      reach: row.reach || 0,
+      results: row.results || 0,
+    };
     aggregate(getRawData(row.campaignId), metrics);
     aggregate(getRawData(row.adsetId), metrics);
     aggregate(getRawData(row.adId), metrics);
@@ -263,19 +329,23 @@ export async function fetchMetaHierarchy(adAccountId: string, since: string, unt
   const hierarchyMap = new Map<string, CampaignHierarchy>();
 
   // A. Create Campaign Nodes from API
-  apiCampaigns.forEach(c => {
+  apiCampaigns.forEach((c) => {
     hierarchyMap.set(c.id, {
       id: c.id,
       name: c.name,
       type: 'campaign',
-      status: (c.effective_status || c.status) as any, // Use effective status if available
+      status: (c.effective_status || c.status) as CampaignHierarchy['status'], // Use effective status if available
       data: { stage1: 0, stage2: 0, stage3: 0, stage4: 0, stage5: 0 },
-      spend: 0, roas: 0, revenue: 0, metaLeads: 0, children: []
+      spend: 0,
+      roas: 0,
+      revenue: 0,
+      metaLeads: 0,
+      children: [],
     });
   });
 
   // B. Attach AdSets
-  apiAdSets.forEach(as => {
+  apiAdSets.forEach((as) => {
     const camp = hierarchyMap.get(as.campaign_id);
     if (camp) {
       if (!camp.children) camp.children = [];
@@ -283,29 +353,36 @@ export async function fetchMetaHierarchy(adAccountId: string, since: string, unt
         id: as.id,
         name: as.name,
         type: 'adset',
-        status: (as.effective_status || as.status) as any,
+        status: (as.effective_status || as.status) as CampaignHierarchy['status'],
         data: { stage1: 0, stage2: 0, stage3: 0, stage4: 0, stage5: 0 },
-        spend: 0, roas: 0, revenue: 0, metaLeads: 0, children: []
+        spend: 0,
+        roas: 0,
+        revenue: 0,
+        metaLeads: 0,
+        children: [],
       });
     }
   });
 
   // C. Attach Ads
-  apiAds.forEach(ad => {
+  apiAds.forEach((ad) => {
     // Find campaign then adset... slightly inefficient O(N*M), but N is small.
     // Better: Map of AdSets?
     // Let's iterate campaigns to find the adset.
     for (const camp of hierarchyMap.values()) {
-      const adSet = camp.children?.find(as => as.id === ad.adset_id);
+      const adSet = camp.children?.find((as) => as.id === ad.adset_id);
       if (adSet) {
         if (!adSet.children) adSet.children = [];
         adSet.children.push({
           id: ad.id,
           name: ad.name,
           type: 'ad',
-          status: (ad.effective_status || ad.status) as any,
+          status: (ad.effective_status || ad.status) as CampaignHierarchy['status'],
           data: { stage1: 0, stage2: 0, stage3: 0, stage4: 0, stage5: 0 },
-          spend: 0, roas: 0, revenue: 0, metaLeads: 0
+          spend: 0,
+          roas: 0,
+          revenue: 0,
+          metaLeads: 0,
         });
         break; // Found it
       }
@@ -323,13 +400,17 @@ export async function fetchMetaHierarchy(adAccountId: string, since: string, unt
         type: 'campaign',
         status: 'completed', // Assume archived/deleted if not in API
         data: { stage1: 0, stage2: 0, stage3: 0, stage4: 0, stage5: 0 },
-        spend: 0, roas: 0, revenue: 0, metaLeads: 0, children: []
+        spend: 0,
+        roas: 0,
+        revenue: 0,
+        metaLeads: 0,
+        children: [],
       });
     }
     const camp = hierarchyMap.get(row.campaignId)!;
 
     // AdSet
-    let adSet = camp.children?.find(c => c.id === row.adsetId);
+    let adSet = camp.children?.find((c) => c.id === row.adsetId);
     if (!adSet) {
       adSet = {
         id: row.adsetId,
@@ -337,14 +418,18 @@ export async function fetchMetaHierarchy(adAccountId: string, since: string, unt
         type: 'adset',
         status: 'completed',
         data: { stage1: 0, stage2: 0, stage3: 0, stage4: 0, stage5: 0 },
-        spend: 0, roas: 0, revenue: 0, metaLeads: 0, children: []
+        spend: 0,
+        roas: 0,
+        revenue: 0,
+        metaLeads: 0,
+        children: [],
       };
       if (!camp.children) camp.children = [];
       camp.children.push(adSet);
     }
 
     // Ad
-    let ad = adSet.children?.find(c => c.id === row.adId);
+    let ad = adSet.children?.find((c) => c.id === row.adId);
     if (!ad) {
       ad = {
         id: row.adId,
@@ -352,7 +437,10 @@ export async function fetchMetaHierarchy(adAccountId: string, since: string, unt
         type: 'ad',
         status: 'completed',
         data: { stage1: 0, stage2: 0, stage3: 0, stage4: 0, stage5: 0 },
-        spend: 0, roas: 0, revenue: 0, metaLeads: 0
+        spend: 0,
+        roas: 0,
+        revenue: 0,
+        metaLeads: 0,
       };
       if (!adSet.children) adSet.children = [];
       adSet.children.push(ad);
@@ -363,7 +451,7 @@ export async function fetchMetaHierarchy(adAccountId: string, since: string, unt
   const applyMetrics = (node: CampaignHierarchy) => {
     const raw = rawDataMap.get(node.id);
     if (raw) {
-      const stageValues = journeyMap.map(metric => calculateMetric(metric, raw));
+      const stageValues = journeyMap.map((metric) => calculateMetric(metric, raw));
       node.data.stage1 = stageValues[0] || 0;
       node.data.stage2 = stageValues[1] || 0;
       node.data.stage3 = stageValues[2] || 0;
@@ -382,7 +470,7 @@ export async function fetchMetaHierarchy(adAccountId: string, since: string, unt
     }
   };
 
-  hierarchyMap.forEach(camp => applyMetrics(camp));
+  hierarchyMap.forEach((camp) => applyMetrics(camp));
 
   return Array.from(hierarchyMap.values());
 }

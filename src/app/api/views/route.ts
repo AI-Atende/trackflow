@@ -1,19 +1,19 @@
-import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import { NextRequest, NextResponse } from 'next/server';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/lib/auth';
+import { prisma } from '@/lib/prisma';
 
 export async function GET(req: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session?.user) {
-    return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
+    return NextResponse.json({ error: 'Não autenticado' }, { status: 401 });
   }
 
   const { searchParams } = new URL(req.url);
-  const dataSource = searchParams.get("dataSource");
+  const dataSource = searchParams.get('dataSource');
 
   if (!dataSource) {
-    return NextResponse.json({ error: "DataSource é obrigatório" }, { status: 400 });
+    return NextResponse.json({ error: 'DataSource é obrigatório' }, { status: 400 });
   }
 
   try {
@@ -22,20 +22,20 @@ export async function GET(req: NextRequest) {
         clientId: session.user.clientId,
         dataSource,
       },
-      orderBy: { createdAt: 'asc' }
+      orderBy: { createdAt: 'asc' },
     });
 
     return NextResponse.json(views);
   } catch (error) {
-    console.error("Erro ao buscar views:", error);
-    return NextResponse.json({ error: "Erro interno" }, { status: 500 });
+    console.error('Erro ao buscar views:', error);
+    return NextResponse.json({ error: 'Erro interno' }, { status: 500 });
   }
 }
 
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session?.user) {
-    return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
+    return NextResponse.json({ error: 'Não autenticado' }, { status: 401 });
   }
 
   try {
@@ -43,14 +43,14 @@ export async function POST(req: NextRequest) {
     const { name, dataSource, columns, isDefault } = body;
 
     if (!name || !dataSource || !columns) {
-      return NextResponse.json({ error: "Dados incompletos" }, { status: 400 });
+      return NextResponse.json({ error: 'Dados incompletos' }, { status: 400 });
     }
 
     // If setting as default, unset others
     if (isDefault) {
       await prisma.tableView.updateMany({
         where: { clientId: session.user.clientId, dataSource },
-        data: { isDefault: false }
+        data: { isDefault: false },
       });
     }
 
@@ -60,13 +60,13 @@ export async function POST(req: NextRequest) {
         name,
         dataSource,
         columns,
-        isDefault: isDefault || false
-      }
+        isDefault: isDefault || false,
+      },
     });
 
     return NextResponse.json(view);
   } catch (error) {
-    console.error("Erro ao criar view:", error);
-    return NextResponse.json({ error: "Erro interno" }, { status: 500 });
+    console.error('Erro ao criar view:', error);
+    return NextResponse.json({ error: 'Erro interno' }, { status: 500 });
   }
 }

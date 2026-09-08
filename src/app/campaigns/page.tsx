@@ -1,20 +1,19 @@
-"use client";
+'use client';
 
-import React, { useState, useEffect, Suspense } from 'react';
+import React, { useState, useEffect, useCallback, Suspense } from 'react';
 import { sortCampaignsRecursively } from '@/utils/campaignSorting';
-import { useSession, signOut } from 'next-auth/react';
+import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
-import { useTheme } from '@/contexts/ThemeContext';
 
 import { format, subDays } from 'date-fns';
-import { LayoutDashboard, Filter, TrendingUp, Target, Menu, User, LogOut, User as UserIcon, Search, Bell } from "lucide-react";
-import { CampaignHierarchy } from '@/types';
-import { Sidebar } from "@/components/Sidebar";
-import { Select } from "@/components/ui/Select";
-import CampaignHierarchyTable from "@/components/CampaignHierarchyTable";
-import { AiInsights } from "@/components/AiInsights";
-import { ViewManager } from "@/components/ViewManager";
-import { Header } from "@/components/Header";
+import { LayoutDashboard, Filter, TrendingUp, Target } from 'lucide-react';
+import { Account, CampaignHierarchy, Goal, GoalTypeSelection } from '@/types';
+import { Sidebar } from '@/components/Sidebar';
+import { Select } from '@/components/ui/Select';
+import CampaignHierarchyTable from '@/components/CampaignHierarchyTable';
+import { AiInsights } from '@/components/AiInsights';
+import { ViewManager } from '@/components/ViewManager';
+import { Header } from '@/components/Header';
 import { usePersistentState } from '@/hooks/usePersistentState';
 
 type DateRange = {
@@ -33,14 +32,15 @@ const dateRangeDeserializer = (stored: string) => {
 const CampaignsContent = () => {
   const { data: session, status } = useSession();
   const router = useRouter();
-  const { theme, toggleTheme } = useTheme();
 
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
 
   // Persist Data Source
-  const [dataSource, setDataSource] = usePersistentState<'KOMMO' | 'META' | 'HYBRID'>('dashboard_dataSource', 'KOMMO');
+  const [dataSource, setDataSource] = usePersistentState<'KOMMO' | 'META' | 'HYBRID'>(
+    'dashboard_dataSource',
+    'KOMMO',
+  );
 
   // Persist Date Range
   const [dateRange, setDateRange] = usePersistentState<DateRange>(
@@ -49,21 +49,38 @@ const CampaignsContent = () => {
       from: subDays(new Date(), 30),
       to: new Date(),
     },
-    dateRangeDeserializer
+    dateRangeDeserializer,
   );
 
   const [campaigns, setCampaigns] = useState<CampaignHierarchy[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [integrationConfig, setIntegrationConfig] = useState<{ isActive: boolean, journeyMap: string[] } | null>(null);
+  const [integrationConfig, setIntegrationConfig] = useState<{
+    isActive: boolean;
+    journeyMap: string[];
+  } | null>(null);
 
-  const [availableAccounts, setAvailableAccounts] = useState<any[]>([]);
-  const [selectedAccount, setSelectedAccount] = useState<any>(null);
+  const [availableAccounts, setAvailableAccounts] = useState<Account[]>([]);
+  const [selectedAccount, setSelectedAccount] = useState<Account | null>(null);
 
-  const [goals, setGoals] = useState<any[]>([]);
-  const [selectedGoalType, setSelectedGoalType] = usePersistentState<'ROAS' | 'CPA' | 'REVENUE'>('dashboard_selectedGoalType', 'ROAS');
+  const [goals, setGoals] = useState<Goal[]>([]);
+  const [selectedGoalType, setSelectedGoalType] = usePersistentState<GoalTypeSelection>(
+    'dashboard_selectedGoalType',
+    'ROAS',
+  );
 
   const [currentColumns, setCurrentColumns] = usePersistentState<string[]>('campaigns_columns', [
-    'name', 'evaluation', 'status', 'spend', 'stage1', 'stage2', 'stage3', 'stage4', 'stage5', 'revenue', 'roas', 'results'
+    'name',
+    'evaluation',
+    'status',
+    'spend',
+    'stage1',
+    'stage2',
+    'stage3',
+    'stage4',
+    'stage5',
+    'revenue',
+    'roas',
+    'results',
   ]);
 
   const [metaJourneyMap, setMetaJourneyMap] = useState<string[]>([]);
@@ -71,21 +88,21 @@ const CampaignsContent = () => {
   // Fetch Goals
   useEffect(() => {
     const loadGoals = () => {
-      if (status === "authenticated") {
+      if (status === 'authenticated') {
         fetch('/api/goals')
-          .then(res => {
-            if (!res.ok) throw new Error("Falha ao buscar metas");
+          .then((res) => {
+            if (!res.ok) throw new Error('Falha ao buscar metas');
             return res.json();
           })
-          .then(data => {
+          .then((data) => {
             if (Array.isArray(data)) {
               setGoals(data);
             } else {
-              console.error("Metas retornaram formato inválido:", data);
+              console.error('Metas retornaram formato inválido:', data);
               setGoals([]);
             }
           })
-          .catch(err => console.error("Erro ao buscar metas:", err));
+          .catch((err) => console.error('Erro ao buscar metas:', err));
       }
     };
 
@@ -95,14 +112,7 @@ const CampaignsContent = () => {
     return () => window.removeEventListener('focus', loadGoals);
   }, [status]);
 
-  // Fetch Accounts
-  useEffect(() => {
-    if (status === "authenticated") {
-      fetchAccounts();
-    }
-  }, [status]);
-
-  const fetchAccounts = async () => {
+  const fetchAccounts = useCallback(async () => {
     try {
       const res = await fetch('/api/accounts');
       if (res.ok) {
@@ -113,25 +123,25 @@ const CampaignsContent = () => {
         }
       }
     } catch (error) {
-      console.error("Erro ao buscar contas:", error);
+      console.error('Erro ao buscar contas:', error);
     }
-  };
+  }, []);
 
+  // Fetch Accounts
   useEffect(() => {
-    if (status === "unauthenticated") {
-      router.push("/auth/login");
-    } else if (status === "authenticated" && selectedAccount) {
-      checkIntegrationAndFetch();
+    if (status === 'authenticated') {
+      (async () => {
+        await fetchAccounts();
+      })();
     }
-  }, [status, session, router, dateRange, dataSource, selectedAccount]);
+  }, [status, fetchAccounts]);
 
-  const checkIntegrationAndFetch = async () => {
+  const checkIntegrationAndFetch = useCallback(async () => {
     if (!selectedAccount) return;
     setIsLoading(true);
 
     // 1. Verificar status da integração Kommo (se necessário para labels ou validação)
     let isKommoActive = false;
-    let journeyMap: string[] = [];
 
     try {
       const res = await fetch(`/api/integrations/kommo?targetAccountId=${selectedAccount.id}`);
@@ -139,14 +149,13 @@ const CampaignsContent = () => {
         const config = await res.json();
         if (config.isActive) {
           isKommoActive = true;
-          journeyMap = config.journeyMap;
           setIntegrationConfig({ isActive: true, journeyMap: config.journeyMap });
         } else {
           setIntegrationConfig(null);
         }
       }
     } catch (e) {
-      console.error("Erro ao verificar integração:", e);
+      console.error('Erro ao verificar integração:', e);
       setIntegrationConfig(null);
     }
 
@@ -164,7 +173,7 @@ const CampaignsContent = () => {
           }
         }
       } catch (e) {
-        console.error("Erro ao buscar config Meta:", e);
+        console.error('Erro ao buscar config Meta:', e);
       }
     }
 
@@ -181,23 +190,36 @@ const CampaignsContent = () => {
         setDataSource('META'); // Update UI
       }
 
-      const res = await fetch(`/api/campaigns?source=${effectiveSource}&since=${since}&until=${until}&sinceLocal=${sinceLocal}&untilLocal=${untilLocal}&targetAccountId=${selectedAccount.id}`);
+      const res = await fetch(
+        `/api/campaigns?source=${effectiveSource}&since=${since}&until=${until}&sinceLocal=${sinceLocal}&untilLocal=${untilLocal}&targetAccountId=${selectedAccount.id}`,
+      );
       if (res.ok) {
         const data = await res.json();
         setCampaigns(data.campaigns || []);
       }
     } catch (error) {
-      console.error("Erro ao buscar campanhas:", error);
+      console.error('Erro ao buscar campanhas:', error);
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [selectedAccount, dataSource, dateRange, setDataSource]);
+
+  useEffect(() => {
+    if (status === 'unauthenticated') {
+      router.push('/auth/login');
+    } else if (status === 'authenticated' && selectedAccount) {
+      (async () => {
+        await checkIntegrationAndFetch();
+      })();
+    }
+  }, [status, session, router, selectedAccount, checkIntegrationAndFetch]);
 
   const filteredCampaigns = sortCampaignsRecursively(
-    campaigns.filter(c => c.name.toLowerCase().includes(searchTerm.toLowerCase()))
+    campaigns.filter((c) => c.name.toLowerCase().includes(searchTerm.toLowerCase())),
   );
 
-  if (status === "loading") return <div className="flex items-center justify-center min-h-screen">Carregando...</div>;
+  if (status === 'loading')
+    return <div className="flex items-center justify-center min-h-screen">Carregando...</div>;
   if (!session) return null;
 
   return (
@@ -217,7 +239,7 @@ const CampaignsContent = () => {
         availableAccounts={availableAccounts}
         currentAccount={selectedAccount}
         onAccountChange={(accountId) => {
-          const acc = availableAccounts.find(a => a.id === accountId);
+          const acc = availableAccounts.find((a) => a.id === accountId);
           if (acc) setSelectedAccount(acc);
         }}
       />
@@ -242,7 +264,9 @@ const CampaignsContent = () => {
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
             <div>
               <h1 className="text-2xl font-bold text-foreground tracking-tight">Campanhas</h1>
-              <p className="text-sm text-muted-foreground">Gerenciamento detalhado de campanhas e anúncios.</p>
+              <p className="text-sm text-muted-foreground">
+                Gerenciamento detalhado de campanhas e anúncios.
+              </p>
             </div>
 
             <div className="flex items-center gap-4">
@@ -254,11 +278,11 @@ const CampaignsContent = () => {
                     { value: 'REVENUE', label: 'Receita' },
                     ...(integrationConfig?.journeyMap || []).map((stage, index) => ({
                       value: `CPA_${index}`,
-                      label: `CPA - ${stage}`
-                    }))
+                      label: `CPA - ${stage}`,
+                    })),
                   ]}
                   value={selectedGoalType}
-                  onChange={(val) => setSelectedGoalType(val as any)}
+                  onChange={(val) => setSelectedGoalType(val as GoalTypeSelection)}
                   placeholder="Meta"
                 />
               </div>
@@ -274,11 +298,21 @@ const CampaignsContent = () => {
                   { key: 'revenue', label: 'Receita' },
                   { key: 'roas', label: 'ROAS' },
                   { key: 'results', label: 'Resultados' },
-                  ...(dataSource !== 'META' ? [{ key: 'ghostLeads', label: 'Leads Fantasmas' }] : []),
-                  ...((integrationConfig?.journeyMap || ['Etapa 1', 'Etapa 2', 'Etapa 3', 'Etapa 4', 'Etapa 5']).map((label, i) => ({
+                  ...(dataSource !== 'META'
+                    ? [{ key: 'ghostLeads', label: 'Leads Fantasmas' }]
+                    : []),
+                  ...(
+                    integrationConfig?.journeyMap || [
+                      'Etapa 1',
+                      'Etapa 2',
+                      'Etapa 3',
+                      'Etapa 4',
+                      'Etapa 5',
+                    ]
+                  ).map((label, i) => ({
                     key: `stage${i + 1}`,
-                    label: label
-                  })))
+                    label: label,
+                  })),
                 ]}
                 currentColumns={currentColumns}
                 onColumnsChange={setCurrentColumns}
@@ -289,8 +323,12 @@ const CampaignsContent = () => {
                 const options = [];
 
                 // 1. Meta (Always first if available)
-                if (selectedAccount?.metaAdAccounts?.length > 0) {
-                  options.push({ value: 'META', label: 'Meta', icon: <LayoutDashboard size={16} /> });
+                if ((selectedAccount?.metaAdAccounts?.length ?? 0) > 0) {
+                  options.push({
+                    value: 'META',
+                    label: 'Meta',
+                    icon: <LayoutDashboard size={16} />,
+                  });
                 }
 
                 // 2. Integrations (Kommo)
@@ -299,8 +337,15 @@ const CampaignsContent = () => {
                 }
 
                 // 3. Hybrid (If both available)
-                if (selectedAccount?.metaAdAccounts?.length > 0 && integrationConfig?.isActive) {
-                  options.push({ value: 'HYBRID', label: 'Kommo + Meta', icon: <TrendingUp size={16} /> });
+                if (
+                  (selectedAccount?.metaAdAccounts?.length ?? 0) > 0 &&
+                  integrationConfig?.isActive
+                ) {
+                  options.push({
+                    value: 'HYBRID',
+                    label: 'Kommo + Meta',
+                    icon: <TrendingUp size={16} />,
+                  });
                 }
 
                 if (options.length === 0) return null;
@@ -311,7 +356,7 @@ const CampaignsContent = () => {
                       options={options}
                       value={dataSource}
                       onChange={(val) => {
-                        setDataSource(val as any);
+                        setDataSource(val as 'KOMMO' | 'META' | 'HYBRID');
                       }}
                       placeholder="Fonte de Dados"
                     />
@@ -319,25 +364,47 @@ const CampaignsContent = () => {
                 );
               })()}
             </div>
-          </div >
+          </div>
 
           <div className="mb-8">
             <AiInsights campaigns={filteredCampaigns} loading={isLoading} />
           </div>
 
-          {
-            dataSource === 'HYBRID' ? (
-              <>
-                <div className="mb-8">
+          {dataSource === 'HYBRID' ? (
+            <>
+              <div className="mb-8">
+                <h2 className="text-lg font-bold text-foreground mb-4 flex items-center gap-2">
+                  <Target size={20} className="text-brand-500" />
+                  Campanhas Integradas
+                </h2>
+                <CampaignHierarchyTable
+                  data={filteredCampaigns.filter((c) => !c.isOrphan)}
+                  loading={isLoading}
+                  journeyLabels={integrationConfig?.journeyMap}
+                  dataSource={dataSource}
+                  goals={goals}
+                  selectedGoalType={selectedGoalType}
+                  columns={currentColumns}
+                  onColumnsReorder={setCurrentColumns}
+                  metaResultLabel={metaJourneyMap[metaJourneyMap.length - 1]}
+                />
+              </div>
+
+              {filteredCampaigns.some((c) => c.isOrphan) && (
+                <div>
                   <h2 className="text-lg font-bold text-foreground mb-4 flex items-center gap-2">
-                    <Target size={20} className="text-brand-500" />
-                    Campanhas Integradas
+                    <Filter size={20} className="text-blue-500" />
+                    Campanhas Adicionais (Apenas Meta)
                   </h2>
+                  <p className="text-sm text-muted-foreground mb-4">
+                    Estas campanhas foram encontradas no Meta Ads mas não possuem correspondência na
+                    integração atual.
+                  </p>
                   <CampaignHierarchyTable
-                    data={filteredCampaigns.filter(c => !c.isOrphan)}
+                    data={filteredCampaigns.filter((c) => c.isOrphan)}
                     loading={isLoading}
-                    journeyLabels={integrationConfig?.journeyMap}
-                    dataSource={dataSource}
+                    journeyLabels={undefined} // Meta orphans don't have journey stages from Kommo
+                    dataSource="META" // Treat as Meta source for columns
                     goals={goals}
                     selectedGoalType={selectedGoalType}
                     columns={currentColumns}
@@ -345,53 +412,32 @@ const CampaignsContent = () => {
                     metaResultLabel={metaJourneyMap[metaJourneyMap.length - 1]}
                   />
                 </div>
-
-                {filteredCampaigns.some(c => c.isOrphan) && (
-                  <div>
-                    <h2 className="text-lg font-bold text-foreground mb-4 flex items-center gap-2">
-                      <Filter size={20} className="text-blue-500" />
-                      Campanhas Adicionais (Apenas Meta)
-                    </h2>
-                    <p className="text-sm text-muted-foreground mb-4">
-                      Estas campanhas foram encontradas no Meta Ads mas não possuem correspondência na integração atual.
-                    </p>
-                    <CampaignHierarchyTable
-                      data={filteredCampaigns.filter(c => c.isOrphan)}
-                      loading={isLoading}
-                      journeyLabels={undefined} // Meta orphans don't have journey stages from Kommo
-                      dataSource="META" // Treat as Meta source for columns
-                      goals={goals}
-                      selectedGoalType={selectedGoalType}
-                      columns={currentColumns}
-                      onColumnsReorder={setCurrentColumns}
-                      metaResultLabel={metaJourneyMap[metaJourneyMap.length - 1]}
-                    />
-                  </div>
-                )}
-              </>
-            ) : (
-              <CampaignHierarchyTable
-                data={filteredCampaigns}
-                loading={isLoading}
-                journeyLabels={integrationConfig?.journeyMap}
-                dataSource={dataSource}
-                goals={goals}
-                selectedGoalType={selectedGoalType}
-                columns={currentColumns}
-                onColumnsReorder={setCurrentColumns}
-                metaResultLabel={metaJourneyMap[metaJourneyMap.length - 1]}
-              />
-            )
-          }
-        </div >
-      </main >
-    </div >
+              )}
+            </>
+          ) : (
+            <CampaignHierarchyTable
+              data={filteredCampaigns}
+              loading={isLoading}
+              journeyLabels={integrationConfig?.journeyMap}
+              dataSource={dataSource}
+              goals={goals}
+              selectedGoalType={selectedGoalType}
+              columns={currentColumns}
+              onColumnsReorder={setCurrentColumns}
+              metaResultLabel={metaJourneyMap[metaJourneyMap.length - 1]}
+            />
+          )}
+        </div>
+      </main>
+    </div>
   );
 };
 
 export default function CampaignsPage() {
   return (
-    <Suspense fallback={<div className="flex items-center justify-center min-h-screen">Carregando...</div>}>
+    <Suspense
+      fallback={<div className="flex items-center justify-center min-h-screen">Carregando...</div>}
+    >
       <CampaignsContent />
     </Suspense>
   );

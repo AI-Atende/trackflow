@@ -20,12 +20,12 @@ export const AiInsights: React.FC<AiInsightsProps> = ({ campaigns, loading: pare
     setInternalLoading(true);
     try {
       // Map to consistent structure for AI
-      const simplifiedCampaigns = campaigns.map(c => {
+      const simplifiedCampaigns = campaigns.map((c) => {
         // Handle CampaignHierarchy structure which might calculate metrics differently or have them pre-calculated
         const spend = typeof c.spend === 'number' ? c.spend : 0;
         const revenue = typeof c.revenue === 'number' ? c.revenue : 0;
         // Safe access to data stages
-        const leads = (c as any).data?.stage1 || 0;
+        const leads = c.data?.stage1 || 0;
 
         return {
           name: c.name,
@@ -49,11 +49,11 @@ export const AiInsights: React.FC<AiInsightsProps> = ({ campaigns, loading: pare
         const data = await res.json();
         setAnalysis(data.analysis);
       } else {
-        setAnalysis("Erro ao gerar insights. Verifique a API Key ou tente novamente.");
+        setAnalysis('Erro ao gerar insights. Verifique a API Key ou tente novamente.');
       }
     } catch (error) {
-      console.error("Erro ao chamar API de IA:", error);
-      setAnalysis("Erro de conexão com o servidor de IA.");
+      console.error('Erro ao chamar API de IA:', error);
+      setAnalysis('Erro de conexão com o servidor de IA.');
     } finally {
       setInternalLoading(false);
     }
@@ -91,7 +91,10 @@ export const AiInsights: React.FC<AiInsightsProps> = ({ campaigns, loading: pare
               <ReactMarkdown>{analysis}</ReactMarkdown>
             </div>
           ) : (
-            <p className="text-muted-foreground/50 italic">Clique em "Analisar Dados" para receber uma auditoria inteligente das suas campanhas baseada no funil de vendas I-V.</p>
+            <p className="text-muted-foreground/50 italic">
+              Clique em &quot;Analisar Dados&quot; para receber uma auditoria inteligente das suas
+              campanhas baseada no funil de vendas I-V.
+            </p>
           )}
         </div>
       </div>

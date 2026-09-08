@@ -20,14 +20,14 @@ export const Select: React.FC<SelectProps> = ({
   options,
   value,
   onChange,
-  placeholder = "Selecione...",
-  className = "",
-  disabled = false
+  placeholder = 'Selecione...',
+  className = '',
+  disabled = false,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  const selectedOption = options.find(opt => opt.value === value);
+  const selectedOption = options.find((opt) => opt.value === value);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -54,15 +54,17 @@ export const Select: React.FC<SelectProps> = ({
         className={`
                     w-full flex items-center justify-between px-4 py-2.5 rounded-lg border transition-all duration-200
                     ${disabled ? 'opacity-50 cursor-not-allowed bg-muted text-muted-foreground border-border' : 'cursor-pointer'}
-                    ${isOpen
-            ? 'border-brand-500 ring-2 ring-brand-500/20 bg-background text-foreground'
-            : 'border-input bg-background hover:bg-accent hover:text-accent-foreground text-foreground'}
+                    ${
+                      isOpen
+                        ? 'border-brand-500 ring-2 ring-brand-500/20 bg-background text-foreground'
+                        : 'border-input bg-background hover:bg-accent hover:text-accent-foreground text-foreground'
+                    }
                 `}
         disabled={disabled}
       >
         <div className="flex items-center gap-2 truncate">
           {selectedOption?.icon && <span className="text-brand-500">{selectedOption.icon}</span>}
-          <span className={selectedOption ? "text-foreground" : "text-muted-foreground"}>
+          <span className={selectedOption ? 'text-foreground' : 'text-muted-foreground'}>
             {selectedOption ? selectedOption.label : placeholder}
           </span>
         </div>
@@ -84,13 +86,19 @@ export const Select: React.FC<SelectProps> = ({
                   onClick={() => handleSelect(option.value)}
                   className={`
                                         w-full flex items-center justify-between px-3 py-2 rounded-md text-sm transition-colors
-                                        ${isSelected
-                      ? 'bg-brand-500/10 text-brand-600 font-medium'
-                      : 'text-popover-foreground hover:bg-accent hover:text-accent-foreground'}
+                                        ${
+                                          isSelected
+                                            ? 'bg-brand-500/10 text-brand-600 font-medium'
+                                            : 'text-popover-foreground hover:bg-accent hover:text-accent-foreground'
+                                        }
                                     `}
                 >
                   <div className="flex items-center gap-2 truncate">
-                    {option.icon && <span className={isSelected ? "text-brand-600" : "text-muted-foreground"}>{option.icon}</span>}
+                    {option.icon && (
+                      <span className={isSelected ? 'text-brand-600' : 'text-muted-foreground'}>
+                        {option.icon}
+                      </span>
+                    )}
                     <span>{option.label}</span>
                   </div>
                   {isSelected && <Check size={14} className="text-brand-600" />}

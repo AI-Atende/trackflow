@@ -1,16 +1,16 @@
-import { prisma } from "./src/lib/prisma";
+import { prisma } from './src/lib/prisma';
 
 async function checkMetaAccount() {
   const insights = await prisma.metaAdInsightDaily.groupBy({
     by: ['date'],
     _count: {
-      id: true
+      id: true,
     },
     orderBy: {
-      date: 'desc'
-    }
+      date: 'desc',
+    },
   });
-  console.log("Insights por data:", JSON.stringify(insights, null, 2));
+  console.log('Insights por data:', JSON.stringify(insights, null, 2));
 }
 
 checkMetaAccount()

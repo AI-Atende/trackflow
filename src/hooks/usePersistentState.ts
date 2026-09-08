@@ -5,37 +5,28 @@ type Deserializer<T> = (value: string) => T;
 export function usePersistentState<T>(
   key: string,
   initialValue: T,
-  deserializer?: Deserializer<T>
+  deserializer?: Deserializer<T>,
 ): [T, Dispatch<SetStateAction<T>>] {
-  const [state, setState] = useState<T>(initialValue);
-  const [isHydrated, setIsHydrated] = useState(false);
-
-  useEffect(() => {
+  const [state, setState] = useState<T>(() => {
+    if (typeof window === 'undefined') return initialValue;
     try {
       const storedValue = localStorage.getItem(key);
       if (storedValue !== null) {
-        if (deserializer) {
-          setState(deserializer(storedValue));
-        } else {
-          setState(JSON.parse(storedValue));
-        }
+        return deserializer ? deserializer(storedValue) : JSON.parse(storedValue);
       }
     } catch (error) {
       console.error(`Error reading localStorage key "${key}":`, error);
-    } finally {
-      setIsHydrated(true);
     }
-  }, [key, deserializer]);
+    return initialValue;
+  });
 
   useEffect(() => {
-    if (isHydrated) {
-      try {
-        localStorage.setItem(key, JSON.stringify(state));
-      } catch (error) {
-        console.error(`Error writing localStorage key "${key}":`, error);
-      }
+    try {
+      localStorage.setItem(key, JSON.stringify(state));
+    } catch (error) {
+      console.error(`Error writing localStorage key "${key}":`, error);
     }
-  }, [key, state, isHydrated]);
+  }, [key, state]);
 
   return [state, setState];
 }

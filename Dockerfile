@@ -11,6 +11,12 @@ RUN npm ci
 # Copy source code
 COPY . .
 
+# Prisma needs DATABASE_URL to resolve its config at generate time, but the
+# real value is only known at container runtime (passed via docker-compose).
+# A placeholder is enough here since `generate` never connects to the database.
+ARG DATABASE_URL="postgresql://user:password@localhost:5432/db"
+ENV DATABASE_URL=$DATABASE_URL
+
 # Generate Prisma client
 RUN npx prisma generate
 
@@ -34,6 +40,8 @@ COPY --from=builder /app/package.json ./package.json
 
 # Copy necessary folders for runtime
 COPY --from=builder /app/prisma ./prisma
+COPY --from=builder /app/generated ./generated
+COPY --from=builder /app/prisma.config.ts ./prisma.config.ts
 
 # Expose port
 EXPOSE 3000

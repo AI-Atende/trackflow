@@ -10,8 +10,7 @@ View your app in AI Studio: https://ai.studio/apps/drive/130TkEYRvnFWjRnzckwyhfq
 
 ## Run Locally
 
-**Prerequisites:**  Node.js
-
+**Prerequisites:** Node.js
 
 1. Install dependencies:
    `npm install`
@@ -27,28 +26,28 @@ Instruções rápidas para rodar a aplicação em Docker (build e servir via ngi
 
 2. Build e start usando docker-compose:
 
-    - Build e rodar:
+   - Build e rodar:
 
-       `docker compose up --build -d`
+     `docker compose up --build -d`
 
-    - Apenas build:
+   - Apenas build:
 
-       `docker compose build`
+     `docker compose build`
 
-    - Subir sem rebuild:
+   - Subir sem rebuild:
 
-       `docker compose up -d`
+     `docker compose up -d`
 
 3. Acesse a aplicação em: `http://localhost:3000/trackflow/` (o app é servido sob o caminho `/trackflow/`).
 
 Verificação rápida após subir o container:
 
- - `curl -I http://localhost:3000/trackflow/` deve retornar 200 e conteúdo HTML.
- - `curl -I http://localhost:3000/` deve redirecionar para `/trackflow/`.
+- `curl -I http://localhost:3000/trackflow/` deve retornar 200 e conteúdo HTML.
+- `curl -I http://localhost:3000/` deve redirecionar para `/trackflow/`.
 
 Se preferir usar apenas Docker (sem compose):
 
- - Build: `docker build --build-arg GEMINI_API_KEY=$GEMINI_API_KEY -t trackflow-dashboard .`
- - Run: `docker run -p 3000:3000 --env GEMINI_API_KEY=$GEMINI_API_KEY trackflow-dashboard`
+- Build: `docker build --build-arg GEMINI_API_KEY=$GEMINI_API_KEY -t trackflow-dashboard .`
+- Run: `docker run -p 3000:3000 --env GEMINI_API_KEY=$GEMINI_API_KEY trackflow-dashboard`
 
 Observação: o build do Vite injeta `GEMINI_API_KEY` como build-arg para que o `vite.config.ts` possa usá-la.

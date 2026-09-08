@@ -1,8 +1,8 @@
-import React, { useEffect, useState } from 'react';
-import { X, Check, AlertCircle, Loader2, BarChart3, Save, RotateCcw } from 'lucide-react';
+import React, { useEffect, useState, useCallback } from 'react';
+import Image from 'next/image';
+import { X, Check, Loader2, BarChart3 } from 'lucide-react';
 import { useToast } from '@/contexts/ToastContext';
 import { Select } from '@/components/ui/Select';
-import { useSession } from "next-auth/react";
 
 interface Props {
   isOpen: boolean;
@@ -10,56 +10,24 @@ interface Props {
   onSuccess: () => void;
 }
 
+interface GoogleAdAccountOption {
+  id: string;
+  name: string;
+  currency?: string;
+}
+
 export function GoogleConfigModal({ isOpen, onClose, onSuccess }: Props) {
   const { showToast } = useToast();
-  const { update } = useSession();
   const [loading, setLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
   // Connection State
   const [isConnected, setIsConnected] = useState(false);
   const [connectedAccountName, setConnectedAccountName] = useState<string | null>(null);
-  const [availableAccounts, setAvailableAccounts] = useState<any[]>([]);
-  const [selectedAccountId, setSelectedAccountId] = useState<string>("");
+  const [availableAccounts, setAvailableAccounts] = useState<GoogleAdAccountOption[]>([]);
+  const [selectedAccountId, setSelectedAccountId] = useState<string>('');
 
-  useEffect(() => {
-    if (isOpen) {
-      checkStatus();
-
-      // Listen for popup message
-      const handleMessage = (event: MessageEvent) => {
-        if (event.data?.type === 'google_auth_success') {
-          showToast("Conexão com Google Ads realizada!", "success");
-          fetchAccounts();
-        }
-      };
-
-      window.addEventListener('message', handleMessage);
-      return () => window.removeEventListener('message', handleMessage);
-    }
-  }, [isOpen]);
-
-  const checkStatus = async () => {
-    setLoading(true);
-    try {
-      const res = await fetch('/api/integrations/google/status');
-      if (res.ok) {
-        const data = await res.json();
-        setIsConnected(data.isConnected);
-        setConnectedAccountName(data.accountName);
-        if (data.isConnected && !data.customerId) {
-          fetchAccounts();
-        }
-      }
-    } catch (error) {
-      console.error(error);
-      showToast("Erro ao carregar status", "error");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const fetchAccounts = async () => {
+  const fetchAccounts = useCallback(async () => {
     setLoading(true);
     try {
       const res = await fetch('/api/integrations/google/accounts');
@@ -69,16 +37,55 @@ export function GoogleConfigModal({ isOpen, onClose, onSuccess }: Props) {
         setIsConnected(true);
       } else {
         const err = await res.text();
-        console.error("Fetch accounts error:", err);
-        showToast("Erro ao buscar contas.", "error");
+        console.error('Fetch accounts error:', err);
+        showToast('Erro ao buscar contas.', 'error');
       }
     } catch (error) {
-      console.error("Error fetching accounts:", error);
-      showToast("Erro ao buscar contas de anúncio.", "error");
+      console.error('Error fetching accounts:', error);
+      showToast('Erro ao buscar contas de anúncio.', 'error');
     } finally {
       setLoading(false);
     }
-  };
+  }, [showToast]);
+
+  const checkStatus = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await fetch('/api/integrations/google/status');
+      if (res.ok) {
+        const data = await res.json();
+        setIsConnected(data.isConnected);
+        setConnectedAccountName(data.accountName);
+        if (data.isConnected && !data.customerId) {
+          await fetchAccounts();
+        }
+      }
+    } catch (error) {
+      console.error(error);
+      showToast('Erro ao carregar status', 'error');
+    } finally {
+      setLoading(false);
+    }
+  }, [showToast, fetchAccounts]);
+
+  useEffect(() => {
+    if (isOpen) {
+      (async () => {
+        await checkStatus();
+      })();
+
+      // Listen for popup message
+      const handleMessage = (event: MessageEvent) => {
+        if (event.data?.type === 'google_auth_success') {
+          showToast('Conexão com Google Ads realizada!', 'success');
+          fetchAccounts();
+        }
+      };
+
+      window.addEventListener('message', handleMessage);
+      return () => window.removeEventListener('message', handleMessage);
+    }
+  }, [isOpen, checkStatus, fetchAccounts, showToast]);
 
   const handleConnect = () => {
     const width = 600;
@@ -89,7 +96,7 @@ export function GoogleConfigModal({ isOpen, onClose, onSuccess }: Props) {
     window.open(
       '/api/integrations/google/auth',
       'GoogleAuth',
-      `width=${width},height=${height},left=${left},top=${top}`
+      `width=${width},height=${height},left=${left},top=${top}`,
     );
   };
 
@@ -97,48 +104,48 @@ export function GoogleConfigModal({ isOpen, onClose, onSuccess }: Props) {
     if (!selectedAccountId) return;
     setIsSaving(true);
     try {
-      const account = availableAccounts.find(a => a.id === selectedAccountId);
+      const account = availableAccounts.find((a) => a.id === selectedAccountId);
       const name = account?.name || `Account ${selectedAccountId}`;
 
       const res = await fetch('/api/integrations/google/select', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ customerId: selectedAccountId, name })
+        body: JSON.stringify({ customerId: selectedAccountId, name }),
       });
 
       if (res.ok) {
-        showToast("Conta selecionada com sucesso!", "success");
+        showToast('Conta selecionada com sucesso!', 'success');
         setConnectedAccountName(name);
         setAvailableAccounts([]);
         checkStatus();
         onSuccess();
       } else {
-        throw new Error("Falha ao selecionar conta");
+        throw new Error('Falha ao selecionar conta');
       }
-    } catch (e) {
-      showToast("Erro ao selecionar conta.", "error");
+    } catch {
+      showToast('Erro ao selecionar conta.', 'error');
     } finally {
       setIsSaving(false);
     }
   };
 
   const handleDisconnect = async () => {
-    if (!confirm("Tem certeza que deseja desconectar?")) return;
+    if (!confirm('Tem certeza que deseja desconectar?')) return;
 
     setLoading(true);
     try {
       const res = await fetch('/api/integrations/google/status', { method: 'DELETE' });
       if (res.ok) {
-        showToast("Desconectado com sucesso", "success");
+        showToast('Desconectado com sucesso', 'success');
         setIsConnected(false);
         setConnectedAccountName(null);
         setAvailableAccounts([]);
         onSuccess();
       } else {
-        showToast("Erro ao desconectar", "error");
+        showToast('Erro ao desconectar', 'error');
       }
-    } catch (error) {
-      showToast("Erro ao desconectar", "error");
+    } catch {
+      showToast('Erro ao desconectar', 'error');
     } finally {
       setLoading(false);
     }
@@ -156,10 +163,15 @@ export function GoogleConfigModal({ isOpen, onClose, onSuccess }: Props) {
             </div>
             <div>
               <h2 className="text-xl font-bold">Configurar Google Ads</h2>
-              <p className="text-sm text-muted-foreground">Conecte sua conta para importar campanhas.</p>
+              <p className="text-sm text-muted-foreground">
+                Conecte sua conta para importar campanhas.
+              </p>
             </div>
           </div>
-          <button onClick={onClose} className="p-2 hover:bg-secondary rounded-full transition-colors">
+          <button
+            onClick={onClose}
+            className="p-2 hover:bg-secondary rounded-full transition-colors"
+          >
             <X size={20} />
           </button>
         </div>
@@ -196,12 +208,14 @@ export function GoogleConfigModal({ isOpen, onClose, onSuccess }: Props) {
                     </div>
                   ) : (
                     <div className="space-y-4 w-full max-w-md mx-auto">
-                      <p className="text-center text-foreground font-medium">Selecione a conta de anúncios:</p>
+                      <p className="text-center text-foreground font-medium">
+                        Selecione a conta de anúncios:
+                      </p>
                       <div className="flex gap-2">
                         <Select
-                          options={availableAccounts.map(a => ({
+                          options={availableAccounts.map((a) => ({
                             value: a.id,
-                            label: `${a.name} (${a.id})`
+                            label: `${a.name} (${a.id})`,
                           }))}
                           value={selectedAccountId}
                           onChange={setSelectedAccountId}
@@ -216,7 +230,9 @@ export function GoogleConfigModal({ isOpen, onClose, onSuccess }: Props) {
                         </button>
                       </div>
                       {!availableAccounts.length && (
-                        <p className="text-center text-yellow-500 text-sm">Nenhuma conta encontrada.</p>
+                        <p className="text-center text-yellow-500 text-sm">
+                          Nenhuma conta encontrada.
+                        </p>
                       )}
                     </div>
                   )}
@@ -243,7 +259,14 @@ export function GoogleConfigModal({ isOpen, onClose, onSuccess }: Props) {
                     onClick={handleConnect}
                     className="w-full max-w-xs py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-xl transition-colors shadow-lg shadow-blue-500/20 flex items-center justify-center gap-2"
                   >
-                    <img src="https://www.gstatic.com/images/branding/product/1x/ads_24dp.png" alt="" className="w-5 h-5 bg-white rounded-full p-0.5" />
+                    <Image
+                      src="https://www.gstatic.com/images/branding/product/1x/ads_24dp.png"
+                      alt=""
+                      width={20}
+                      height={20}
+                      unoptimized
+                      className="w-5 h-5 bg-white rounded-full p-0.5"
+                    />
                     Conectar Google Ads
                   </button>
                 </>

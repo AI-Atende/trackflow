@@ -4,6 +4,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { fetchKommoData } from "@/services/kommoService";
 import { fetchMetaCampaigns } from "@/services/metaService";
+import { AdCampaign } from "@/types";
 
 export async function GET(req: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -27,8 +28,12 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "Integração Kommo não ativa ou não configurada" }, { status: 400 });
     }
 
-    const { subdomain } = config.config as any;
+    const { subdomain } = config.config as { subdomain?: string };
     const journeyMap = (config.journeyMap as string[]) || ["Criado", "Qualificado", "Venda"];
+
+    if (!subdomain) {
+      return NextResponse.json({ error: "Subdomínio Kommo não configurado" }, { status: 400 });
+    }
 
     const dateRange = since && until ? {
       from: new Date(since),
@@ -42,7 +47,7 @@ export async function GET(req: NextRequest) {
     const untilLocal = searchParams.get("untilLocal");
 
     // 2. Buscar dados do Meta (se houver conta vinculada)
-    let metaCampaigns: any[] = [];
+    let metaCampaigns: AdCampaign[] = [];
     if (adAccountId && since && until) {
       try {
         const sinceDate = new Date(since);
@@ -69,14 +74,14 @@ export async function GET(req: NextRequest) {
       const kNameClean = normalizeString(kCamp.name);
 
       // Encontrar TODAS as correspondências exatas (pelo nome limpo) que ainda não foram usadas
-      let matches = metaCampaigns.filter((mCamp: any) => {
+      let matches = metaCampaigns.filter((mCamp) => {
         if (usedMetaIds.has(mCamp.id)) return false;
         return normalizeString(mCamp.name) === kNameClean;
       });
 
       // Se não houver correspondência exata, tentar "Smart Match" (contém) com nome limpo
       if (matches.length === 0) {
-        matches = metaCampaigns.filter((mCamp: any) => {
+        matches = metaCampaigns.filter((mCamp) => {
           if (usedMetaIds.has(mCamp.id)) return false;
           const mNameClean = normalizeString(mCamp.name);
           return kNameClean.includes(mNameClean) || mNameClean.includes(kNameClean);
@@ -84,12 +89,12 @@ export async function GET(req: NextRequest) {
       }
 
       if (matches.length > 0) {
-        matches.forEach((m: any) => usedMetaIds.add(m.id));
+        matches.forEach((m) => usedMetaIds.add(m.id));
       }
 
       // Somar métricas de todas as campanhas encontradas (se houver)
-      const spend = matches.reduce((sum: number, m: any) => sum + (m.spend || 0), 0);
-      const metaLeads = matches.reduce((sum: number, m: any) => sum + (m.metaLeads || 0), 0);
+      const spend = matches.reduce((sum: number, m) => sum + (m.spend || 0), 0);
+      const metaLeads = matches.reduce((sum: number, m) => sum + (m.metaLeads || 0), 0);
 
       return {
         ...kCamp,
@@ -100,14 +105,14 @@ export async function GET(req: NextRequest) {
     });
 
     // 4. Identificar e adicionar "Orfãos" do Meta (Full Outer Join behavior)
-    const orphanMetaCampaigns = metaCampaigns.filter((mCamp: any) => !usedMetaIds.has(mCamp.id));
+    const orphanMetaCampaigns = metaCampaigns.filter((mCamp) => !usedMetaIds.has(mCamp.id));
 
     const source = searchParams.get("source") || "HYBRID"; // Default to HYBRID if not specified (backward compatibility)
 
-    let finalCampaigns = enrichedCampaigns;
+    let finalCampaigns: AdCampaign[] = enrichedCampaigns;
 
     if (source === 'HYBRID') {
-      const formattedOrphans = orphanMetaCampaigns.map((mCamp: any) => ({
+      const formattedOrphans = orphanMetaCampaigns.map((mCamp) => ({
         ...mCamp,
         status: mCamp.status as "active" | "paused" | "completed",
         isOrphan: true

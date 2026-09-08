@@ -1,18 +1,17 @@
-import { GoogleGenAI } from "@google/genai";
-import { AdCampaign } from "../types";
+import { GoogleGenAI } from '@google/genai';
 
 const getClient = () => {
   const apiKey = process.env.API_KEY;
   if (!apiKey) {
-    console.warn("API_KEY is missing. AI features will be disabled.");
+    console.warn('API_KEY is missing. AI features will be disabled.');
     return null;
   }
   return new GoogleGenAI({ apiKey });
 };
 
-export const analyzeCampaignData = async (campaigns: any[]): Promise<string> => {
+export const analyzeCampaignData = async (campaigns: unknown[]): Promise<string> => {
   const client = getClient();
-  if (!client) return "API_KEY não configurada. Adicione sua chave para insights de IA.";
+  if (!client) return 'API_KEY não configurada. Adicione sua chave para insights de IA.';
 
   const prompt = `
     Atue como um especialista sênior em Marketing Digital e Análise de Dados.
@@ -39,9 +38,9 @@ export const analyzeCampaignData = async (campaigns: any[]): Promise<string> => 
       model: 'gemini-2.5-flash',
       contents: prompt,
     });
-    return response.text || "Não foi possível gerar insights no momento.";
+    return response.text || 'Não foi possível gerar insights no momento.';
   } catch (error) {
-    console.error("Error calling Gemini:", error);
-    return "Erro ao conectar com a inteligência artificial. Tente novamente mais tarde.";
+    console.error('Error calling Gemini:', error);
+    return 'Erro ao conectar com a inteligência artificial. Tente novamente mais tarde.';
   }
 };

@@ -1,3 +1,49 @@
+export interface AccountMetaAdAccount {
+  adAccountId: string;
+  name: string | null;
+}
+
+export interface AccountIntegration {
+  provider: string;
+  config: { subdomain?: string } | null;
+  journeyMap: string[] | null;
+}
+
+export interface Account {
+  id: string;
+  name: string;
+  email: string;
+  image: string | null;
+  metaAdAccounts: AccountMetaAdAccount[];
+  integrations: AccountIntegration[];
+}
+
+export interface EvolutionDataPoint {
+  date: string;
+  revenue: number;
+  receive: number;
+  spend: number;
+  roas: number;
+  [stageName: string]: string | number;
+}
+
+export type GoalTypeSelection = 'ROAS' | 'REVENUE' | `CPA_${number}`;
+
+export interface Goal {
+  type: 'REVENUE' | 'ROAS' | 'CPA';
+  stageIndex?: number | null;
+  value: number;
+}
+
+export interface Address {
+  street?: string;
+  number?: string;
+  neighborhood?: string;
+  city?: string;
+  state?: string;
+  zip?: string;
+}
+
 export interface StageData {
   label: string; // e.g., "I", "II"
   description: string; // e.g., "Impressões", "Checkout"
@@ -28,7 +74,7 @@ export enum JourneyStage {
   II = 'II',
   III = 'III',
   IV = 'IV',
-  V = 'V'
+  V = 'V',
 }
 
 export interface MetricSummary {

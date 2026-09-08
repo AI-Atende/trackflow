@@ -9,7 +9,13 @@ interface IntegrationCardProps {
   onConfigure: () => void;
 }
 
-export const IntegrationCard: React.FC<IntegrationCardProps> = ({ name, description, icon, isActive, onConfigure }) => {
+export const IntegrationCard: React.FC<IntegrationCardProps> = ({
+  name,
+  description,
+  icon,
+  isActive,
+  onConfigure,
+}) => {
   return (
     <div className="bg-card/50 backdrop-blur-md border border-border rounded-xl shadow-lg overflow-hidden glass hover:border-brand-500/50 transition-all group">
       <div className="p-6 flex flex-col h-full">
@@ -17,7 +23,9 @@ export const IntegrationCard: React.FC<IntegrationCardProps> = ({ name, descript
           <div className="p-3 bg-secondary/50 rounded-xl group-hover:scale-110 transition-transform duration-300">
             {icon}
           </div>
-          <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border ${isActive ? 'bg-green-500/10 text-green-500 border-green-500/20' : 'bg-secondary text-muted-foreground border-border'}`}>
+          <div
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border ${isActive ? 'bg-green-500/10 text-green-500 border-green-500/20' : 'bg-secondary text-muted-foreground border-border'}`}
+          >
             {isActive ? <CheckCircle2 size={12} /> : <XCircle size={12} />}
             {isActive ? 'Ativo' : 'Inativo'}
           </div>

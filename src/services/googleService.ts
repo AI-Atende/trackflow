@@ -1,13 +1,53 @@
-import { prisma } from "@/lib/prisma";
+import { prisma } from '@/lib/prisma';
+import { CampaignHierarchy } from '@/types';
+
+type GoogleAdsMetricsRow = {
+  cost_micros?: string | number;
+  impressions?: string | number;
+  clicks?: string | number;
+  conversions?: string | number;
+  all_conversions_value?: string | number;
+};
+
+type GoogleAdsCampaignRow = {
+  campaign: { id: string | number; name: string; status?: string };
+  metrics: GoogleAdsMetricsRow;
+};
+
+type GoogleAdsAdGroupRow = {
+  campaign: { id: string | number };
+  ad_group: { id: string | number; name: string; status?: string };
+  metrics: GoogleAdsMetricsRow;
+};
+
+type GoogleAdsAdRow = {
+  ad_group: { id: string | number };
+  ad_group_ad: {
+    ad: { id: string | number; name?: string };
+    status?: string;
+  };
+  metrics: GoogleAdsMetricsRow;
+};
+
+type GoogleHierarchyNode = {
+  id: string;
+  name: string;
+  type: string;
+  status: string;
+  data: { stage1: number; stage2: number; stage3: number; stage4: number; stage5: number };
+  spend: number;
+  roas: number;
+  revenue: number;
+  metaLeads: number;
+  children?: GoogleHierarchyNode[];
+};
 
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID!;
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET!;
 const REDIRECT_URI = `${process.env.NEXTAUTH_URL}/api/google/callback`;
 
 // Scopes for Google Ads
-const SCOPES = [
-  'https://www.googleapis.com/auth/adwords'
-];
+const SCOPES = ['https://www.googleapis.com/auth/adwords'];
 
 export function getGoogleAuthUrl(state?: string) {
   const params = new URLSearchParams({
@@ -16,7 +56,7 @@ export function getGoogleAuthUrl(state?: string) {
     response_type: 'code',
     scope: SCOPES.join(' '),
     access_type: 'offline', // Important for refresh token
-    prompt: 'consent',      // Force consent to ensure refresh token is returned
+    prompt: 'consent', // Force consent to ensure refresh token is returned
     state: state || '',
   });
   return `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
@@ -65,46 +105,24 @@ export async function refreshGoogleToken(refreshToken: string) {
 // --- Google Ads API Helpers ---
 
 const GOOGLE_ADS_API_VERSION = 'v16';
-const GOOGLE_ADS_BASE_URL = `https://googleads.googleapis.com/${GOOGLE_ADS_API_VERSION}`;
-
-async function googleAdsRequest(customerId: string, query: string, accessToken: string, developerToken: string = 'INSERT_DEVELOPER_TOKEN_HERE') {
-  // NOTE: Developer Token is required. Usually stored in env.
-  // Assuming user has one.
-  const DEV_TOKEN = process.env.GOOGLE_ADS_DEVELOPER_TOKEN!;
-
-  const res = await fetch(`${GOOGLE_ADS_BASE_URL}/customers/${customerId}/googleAds:search`, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${accessToken}`,
-      'developer-token': DEV_TOKEN,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ query }),
-  });
-
-  if (!res.ok) {
-    const err = await res.json();
-    console.error("Google Ads API Error:", JSON.stringify(err, null, 2));
-    throw new Error(`Google Ads API Request Failed: ${res.statusText}`);
-  }
-
-  return res.json();
-}
 
 export async function listAccessibleCustomers(accessToken: string) {
   const DEV_TOKEN = process.env.GOOGLE_ADS_DEVELOPER_TOKEN!;
-  const res = await fetch(`https://googleads.googleapis.com/${GOOGLE_ADS_API_VERSION}/customers:listAccessibleCustomers`, {
-    method: 'GET',
-    headers: {
-      'Authorization': `Bearer ${accessToken}`,
-      'developer-token': DEV_TOKEN,
-      'Content-Type': 'application/json',
+  const res = await fetch(
+    `https://googleads.googleapis.com/${GOOGLE_ADS_API_VERSION}/customers:listAccessibleCustomers`,
+    {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'developer-token': DEV_TOKEN,
+        'Content-Type': 'application/json',
+      },
     },
-  });
+  );
 
   if (!res.ok) {
     const err = await res.json();
-    console.error("Google Ads List Customers Error:", JSON.stringify(err, null, 2));
+    console.error('Google Ads List Customers Error:', JSON.stringify(err, null, 2));
     throw new Error(`Failed to list customers: ${res.statusText}`);
   }
 
@@ -116,16 +134,20 @@ export async function listAccessibleCustomers(accessToken: string) {
 
 // --- Data Fetching ---
 
-export async function fetchGoogleHierarchy(googleAdAccountId: string, since: string, until: string) {
+export async function fetchGoogleHierarchy(
+  googleAdAccountId: string,
+  since: string,
+  until: string,
+) {
   try {
     const account = await prisma.googleAdAccount.findUnique({
       where: { id: googleAdAccountId },
     });
 
-    if (!account) throw new Error("Google Ad Account not found");
+    if (!account) throw new Error('Google Ad Account not found');
 
     // Initialize Client
-    const { GoogleAdsApi } = await import("google-ads-api");
+    const { GoogleAdsApi } = await import('google-ads-api');
     const client = new GoogleAdsApi({
       client_id: GOOGLE_CLIENT_ID,
       client_secret: GOOGLE_CLIENT_SECRET,
@@ -197,30 +219,48 @@ export async function fetchGoogleHierarchy(googleAdAccountId: string, since: str
     const [campaigns, adGroups, ads] = await Promise.all([
       customer.query(campaignQuery),
       customer.query(adGroupQuery),
-      customer.query(adQuery)
+      customer.query(adQuery),
     ]);
 
-    console.log("Google Ads Sync - Campaigns (First Item):", campaigns.length > 0 ? JSON.stringify(campaigns[0], null, 2) : "No campaigns found");
-    console.log("Google Ads Sync - AdGroups (First Item):", adGroups.length > 0 ? JSON.stringify(adGroups[0], null, 2) : "No ad groups found");
-    console.log("Google Ads Sync - Ads (First Item):", ads.length > 0 ? JSON.stringify(ads[0], null, 2) : "No ads found");
+    console.log(
+      'Google Ads Sync - Campaigns (First Item):',
+      campaigns.length > 0 ? JSON.stringify(campaigns[0], null, 2) : 'No campaigns found',
+    );
+    console.log(
+      'Google Ads Sync - AdGroups (First Item):',
+      adGroups.length > 0 ? JSON.stringify(adGroups[0], null, 2) : 'No ad groups found',
+    );
+    console.log(
+      'Google Ads Sync - Ads (First Item):',
+      ads.length > 0 ? JSON.stringify(ads[0], null, 2) : 'No ads found',
+    );
 
-    // Transform to Hierarchy
-    return mapGoogleDataToHierarchy(campaigns, adGroups, ads);
-
-  } catch (error: any) {
-    console.error("Google Ads Sync Error:", JSON.stringify(error, null, 2));
+    // Transform to Hierarchy (the GAQL SELECT above determines which fields are actually
+    // populated, which the library's generic row type doesn't capture)
+    return mapGoogleDataToHierarchy(
+      campaigns as unknown as GoogleAdsCampaignRow[],
+      adGroups as unknown as GoogleAdsAdGroupRow[],
+      ads as unknown as GoogleAdsAdRow[],
+    );
+  } catch (error) {
+    console.error('Google Ads Sync Error:', JSON.stringify(error, null, 2));
     // Also log the message directly in case stringify fails
-    console.error("Google Ads Sync Error Message:", error.message);
-    throw new Error(`Failed to sync Google Ads: ${error.message}`);
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    console.error('Google Ads Sync Error Message:', message);
+    throw new Error(`Failed to sync Google Ads: ${message}`);
   }
 }
 
-function mapGoogleDataToHierarchy(campaigns: any[], adGroups: any[], ads: any[]): any[] {
+function mapGoogleDataToHierarchy(
+  campaigns: GoogleAdsCampaignRow[],
+  adGroups: GoogleAdsAdGroupRow[],
+  ads: GoogleAdsAdRow[],
+): CampaignHierarchy[] {
   // The library returns arrays of rows directly
 
-  const hierarchy: any[] = [];
-  const campaignMap = new Map<string, any>();
-  const adGroupMap = new Map<string, any>();
+  const hierarchy: GoogleHierarchyNode[] = [];
+  const campaignMap = new Map<string, GoogleHierarchyNode>();
+  const adGroupMap = new Map<string, GoogleHierarchyNode>();
 
   // Process Campaigns
   for (const row of campaigns) {
@@ -240,7 +280,7 @@ function mapGoogleDataToHierarchy(campaigns: any[], adGroups: any[], ads: any[])
       roas: 0,
       revenue: Number(m.all_conversions_value) || 0,
       metaLeads: Number(m.conversions) || 0,
-      children: []
+      children: [],
     };
     campaignMap.set(node.id, node);
     hierarchy.push(node);
@@ -266,10 +306,10 @@ function mapGoogleDataToHierarchy(campaigns: any[], adGroups: any[], ads: any[])
         roas: 0,
         revenue: 0,
         metaLeads: Number(m.conversions) || 0,
-        children: []
+        children: [],
       };
       adGroupMap.set(node.id, node);
-      parent.children.push(node);
+      parent.children!.push(node);
     }
   }
 
@@ -295,9 +335,11 @@ function mapGoogleDataToHierarchy(campaigns: any[], adGroups: any[], ads: any[])
         revenue: 0,
         metaLeads: Number(m.conversions) || 0,
       };
-      parent.children.push(node);
+      parent.children!.push(node);
     }
   }
 
-  return hierarchy;
+  // The status strings above are derived at runtime from the Google Ads API and aren't
+  // narrowed to CampaignHierarchy's literal union at the type level.
+  return hierarchy as CampaignHierarchy[];
 }

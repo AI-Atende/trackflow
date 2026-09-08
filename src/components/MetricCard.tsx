@@ -28,7 +28,9 @@ export const MetricCard: React.FC<MetricCardProps> = ({ metric, loading, tooltip
       <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
         {tooltip ? (
           <Tooltip content={tooltip} position="bottom">
-            <span className="cursor-help border-b border-dotted border-muted-foreground/50">{metric.label}</span>
+            <span className="cursor-help border-b border-dotted border-muted-foreground/50">
+              {metric.label}
+            </span>
           </Tooltip>
         ) : (
           metric.label

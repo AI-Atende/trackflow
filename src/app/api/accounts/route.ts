@@ -1,13 +1,13 @@
-import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+import { NextRequest, NextResponse } from 'next/server';
+import { prisma } from '@/lib/prisma';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/lib/auth';
 
-export async function GET(req: NextRequest) {
+export async function GET(_req: NextRequest) {
   const session = await getServerSession(authOptions);
 
   if (!session?.user) {
-    return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
+    return NextResponse.json({ error: 'Não autenticado' }, { status: 401 });
   }
 
   try {
@@ -20,20 +20,20 @@ export async function GET(req: NextRequest) {
         email: true,
         image: true,
         metaAdAccounts: {
-          select: { adAccountId: true, name: true }
+          select: { adAccountId: true, name: true },
         },
         integrations: {
           where: { isActive: true },
-          select: { provider: true, config: true, journeyMap: true }
-        }
-      }
+          select: { provider: true, config: true, journeyMap: true },
+        },
+      },
     });
 
     // 2. Get shared accounts (where user is guest and status is ACCEPTED)
     const sharedInvites = await prisma.accountInvite.findMany({
       where: {
         guestId: session.user.clientId,
-        status: "ACCEPTED"
+        status: 'ACCEPTED',
       },
       include: {
         owner: {
@@ -43,24 +43,24 @@ export async function GET(req: NextRequest) {
             email: true,
             image: true,
             metaAdAccounts: {
-              select: { adAccountId: true, name: true }
+              select: { adAccountId: true, name: true },
             },
             integrations: {
               where: { isActive: true },
-              select: { provider: true, config: true, journeyMap: true }
-            }
-          }
-        }
-      }
+              select: { provider: true, config: true, journeyMap: true },
+            },
+          },
+        },
+      },
     });
 
-    const sharedAccounts = sharedInvites.map(invite => invite.owner);
+    const sharedAccounts = sharedInvites.map((invite) => invite.owner);
 
     const accounts = [ownAccount, ...sharedAccounts].filter(Boolean);
 
     return NextResponse.json(accounts);
   } catch (error) {
-    console.error("Erro ao buscar contas:", error);
-    return NextResponse.json({ error: "Erro ao buscar contas" }, { status: 500 });
+    console.error('Erro ao buscar contas:', error);
+    return NextResponse.json({ error: 'Erro ao buscar contas' }, { status: 500 });
   }
 }

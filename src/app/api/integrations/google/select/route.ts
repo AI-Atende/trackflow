@@ -1,28 +1,28 @@
-import { NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import { NextResponse } from 'next/server';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/lib/auth';
+import { prisma } from '@/lib/prisma';
 
 export async function POST(request: Request) {
   const session = await getServerSession(authOptions);
   if (!session) {
-    return new NextResponse("Unauthorized", { status: 401 });
+    return new NextResponse('Unauthorized', { status: 401 });
   }
 
   const body = await request.json();
   const { customerId, name } = body;
 
   if (!customerId) {
-    return new NextResponse("Missing customerId", { status: 400 });
+    return new NextResponse('Missing customerId', { status: 400 });
   }
 
   const client = await prisma.client.findUnique({
     where: { id: session.user.clientId },
-    select: { googleUserRefreshToken: true }
+    select: { googleUserRefreshToken: true },
   });
 
   if (!client?.googleUserRefreshToken) {
-    return new NextResponse("Not connected to Google Ads", { status: 400 });
+    return new NextResponse('Not connected to Google Ads', { status: 400 });
   }
 
   try {
@@ -32,17 +32,17 @@ export async function POST(request: Request) {
     await prisma.googleAdAccount.updateMany({
       where: {
         clientId: session.user.clientId,
-        customerId: { not: customerId }
+        customerId: { not: customerId },
       },
-      data: { status: "DISCONNECTED" }
+      data: { status: 'DISCONNECTED' },
     });
 
     // Check if exists
     const existing = await prisma.googleAdAccount.findFirst({
       where: {
         clientId: session.user.clientId,
-        customerId: customerId
-      }
+        customerId: customerId,
+      },
     });
 
     if (existing) {
@@ -50,9 +50,9 @@ export async function POST(request: Request) {
         where: { id: existing.id },
         data: {
           refreshToken: client.googleUserRefreshToken,
-          status: "ACTIVE",
-          name: name || existing.name
-        }
+          status: 'ACTIVE',
+          name: name || existing.name,
+        },
       });
     } else {
       await prisma.googleAdAccount.create({
@@ -60,16 +60,15 @@ export async function POST(request: Request) {
           clientId: session.user.clientId,
           customerId: customerId,
           refreshToken: client.googleUserRefreshToken,
-          status: "ACTIVE",
-          name: name || `Account ${customerId}`
-        }
+          status: 'ACTIVE',
+          name: name || `Account ${customerId}`,
+        },
       });
     }
 
     return NextResponse.json({ success: true });
-
   } catch (error) {
-    console.error("Error selecting Google ad account:", error);
-    return new NextResponse("Failed to select account", { status: 500 });
+    console.error('Error selecting Google ad account:', error);
+    return new NextResponse('Failed to select account', { status: 500 });
   }
 }

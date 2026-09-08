@@ -1,12 +1,12 @@
-import { NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import { NextResponse } from 'next/server';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/lib/auth';
+import { prisma } from '@/lib/prisma';
 
-export async function GET(request: Request) {
+export async function GET(_request: Request) {
   const session = await getServerSession(authOptions);
   if (!session) {
-    return new NextResponse("Unauthorized", { status: 401 });
+    return new NextResponse('Unauthorized', { status: 401 });
   }
 
   const client = await prisma.client.findUnique({
@@ -14,17 +14,17 @@ export async function GET(request: Request) {
     select: {
       googleUserAccessToken: true,
       googleUserRefreshToken: true,
-      googleUserTokenExpiry: true
-    }
+      googleUserTokenExpiry: true,
+    },
   });
 
   if (!client?.googleUserRefreshToken) {
-    return new NextResponse("Not connected to Google Ads", { status: 400 });
+    return new NextResponse('Not connected to Google Ads', { status: 400 });
   }
 
   try {
     // Let's instantiate a new client for this user
-    const { GoogleAdsApi } = await import("google-ads-api");
+    const { GoogleAdsApi } = await import('google-ads-api');
 
     const userClient = new GoogleAdsApi({
       client_id: process.env.GOOGLE_CLIENT_ID!,
@@ -37,7 +37,7 @@ export async function GET(request: Request) {
     // Checking docs: client.listAccessibleCustomers(refreshToken)
 
     const result = await userClient.listAccessibleCustomers(client.googleUserRefreshToken);
-    console.log("Google Ads listAccessibleCustomers result:", JSON.stringify(result, null, 2));
+    console.log('Google Ads listAccessibleCustomers result:', JSON.stringify(result, null, 2));
 
     // The library might return the array directly, or an object with resource_names/resourceNames
     let resourceNames: string[] = [];
@@ -45,32 +45,29 @@ export async function GET(request: Request) {
     if (Array.isArray(result)) {
       resourceNames = result;
     } else if (result && typeof result === 'object') {
-      // @ts-ignore
       if (Array.isArray(result.resource_names)) {
-        // @ts-ignore
         resourceNames = result.resource_names;
-        // @ts-ignore
+        // @ts-expect-error - fallback for a camelCase response shape not covered by the library's types
       } else if (Array.isArray(result.resourceNames)) {
-        // @ts-ignore
+        // @ts-expect-error - fallback for a camelCase response shape not covered by the library's types
         resourceNames = result.resourceNames;
       }
     }
 
     const accounts = resourceNames.map((name: string) => {
-      const id = name.split("/")[1];
+      const id = name.split('/')[1];
       return {
         id: id,
         name: `Account ${id}`,
-        currency: "Unknown"
+        currency: 'Unknown',
       };
     });
 
     return NextResponse.json(accounts);
-
-  } catch (error: any) {
-    console.error("Error fetching Google Ads accounts:", error);
+  } catch (error) {
+    console.error('Error fetching Google Ads accounts:', error);
     // If it's a library error, it might have a specific structure
-    const msg = error.message || JSON.stringify(error);
+    const msg = error instanceof Error ? error.message : JSON.stringify(error);
     return new NextResponse(`Failed to fetch accounts: ${msg}`, { status: 500 });
   }
 }

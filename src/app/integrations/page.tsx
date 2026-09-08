@@ -1,31 +1,25 @@
-"use client";
+'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { ArrowLeft, Link, Facebook, Menu, BarChart3 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { IntegrationCard } from '@/components/IntegrationCard';
 import { KommoConfigModal } from '@/components/KommoConfigModal';
 import { MetaConfigModal } from '@/components/MetaConfigModal';
 import { GoogleConfigModal } from '@/components/GoogleConfigModal';
-import { useToast } from '@/contexts/ToastContext';
-import { Sidebar } from "@/components/Sidebar";
-import { useSession } from "next-auth/react";
+import { Sidebar } from '@/components/Sidebar';
+import { useSession } from 'next-auth/react';
 
 export default function IntegrationsPage() {
   const router = useRouter();
   const { data: session } = useSession();
-  const { showToast } = useToast();
   const [isKommoModalOpen, setIsKommoModalOpen] = useState(false);
   const [kommoStatus, setKommoStatus] = useState(false);
   const [isMetaModalOpen, setIsMetaModalOpen] = useState(false);
   const [isGoogleModalOpen, setIsGoogleModalOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
-  useEffect(() => {
-    fetchKommoStatus();
-  }, []);
-
-  const fetchKommoStatus = async () => {
+  const fetchKommoStatus = useCallback(async () => {
     try {
       const res = await fetch('/api/integrations/kommo');
       if (res.ok) {
@@ -33,18 +27,28 @@ export default function IntegrationsPage() {
         setKommoStatus(data.isActive);
       }
     } catch (error) {
-      console.error("Erro ao verificar status Kommo:", error);
+      console.error('Erro ao verificar status Kommo:', error);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    (async () => {
+      await fetchKommoStatus();
+    })();
+  }, [fetchKommoStatus]);
 
   return (
     <div className="flex h-screen bg-background text-foreground font-sans">
       <Sidebar
         isOpen={isMobileMenuOpen}
         onClose={() => setIsMobileMenuOpen(false)}
-        currentAccount={{ id: session?.user?.clientId || '', name: session?.user?.name || '', image: session?.user?.image }}
+        currentAccount={{
+          id: session?.user?.clientId || '',
+          name: session?.user?.name || '',
+          image: session?.user?.image,
+        }}
         availableAccounts={[]} // Placeholder
-        onAccountChange={() => { }}
+        onAccountChange={() => {}}
       />
 
       <main className="flex-1 flex flex-col h-screen relative overflow-hidden">
@@ -56,7 +60,10 @@ export default function IntegrationsPage() {
             >
               <Menu size={24} />
             </button>
-            <button onClick={() => router.back()} className="hidden md:block p-2 -ml-2 hover:bg-secondary rounded-lg transition-colors">
+            <button
+              onClick={() => router.back()}
+              className="hidden md:block p-2 -ml-2 hover:bg-secondary rounded-lg transition-colors"
+            >
               <ArrowLeft size={20} className="text-muted-foreground" />
             </button>
             <h1 className="text-xl font-bold text-foreground">Integrações</h1>
@@ -66,8 +73,12 @@ export default function IntegrationsPage() {
         <div className="flex-1 overflow-y-auto p-6 md:p-8 space-y-8 bg-background">
           <div className="max-w-6xl mx-auto">
             <div className="mb-8">
-              <h2 className="text-2xl font-bold text-foreground tracking-tight">Gerenciar Conexões</h2>
-              <p className="text-muted-foreground">Conecte suas ferramentas para sincronizar dados automaticamente.</p>
+              <h2 className="text-2xl font-bold text-foreground tracking-tight">
+                Gerenciar Conexões
+              </h2>
+              <p className="text-muted-foreground">
+                Conecte suas ferramentas para sincronizar dados automaticamente.
+              </p>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -108,12 +119,12 @@ export default function IntegrationsPage() {
             <MetaConfigModal
               isOpen={isMetaModalOpen}
               onClose={() => setIsMetaModalOpen(false)}
-              onSuccess={() => { }}
+              onSuccess={() => {}}
             />
             <GoogleConfigModal
               isOpen={isGoogleModalOpen}
               onClose={() => setIsGoogleModalOpen(false)}
-              onSuccess={() => { }}
+              onSuccess={() => {}}
             />
           </div>
         </div>

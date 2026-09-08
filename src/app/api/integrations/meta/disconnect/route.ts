@@ -1,12 +1,12 @@
-import { NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import { NextResponse } from 'next/server';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/lib/auth';
+import { prisma } from '@/lib/prisma';
 
 export async function DELETE() {
   const session = await getServerSession(authOptions);
   if (!session) {
-    return new NextResponse("Unauthorized", { status: 401 });
+    return new NextResponse('Unauthorized', { status: 401 });
   }
 
   try {
@@ -21,13 +21,13 @@ export async function DELETE() {
 
     // 2. Deactivate Integration Config
     const config = await prisma.integrationConfig.findFirst({
-      where: { clientId: session.user.clientId, provider: "META" }
+      where: { clientId: session.user.clientId, provider: 'META' },
     });
 
     if (config) {
       await prisma.integrationConfig.update({
         where: { id: config.id },
-        data: { isActive: false }
+        data: { isActive: false },
       });
     }
 
@@ -37,7 +37,7 @@ export async function DELETE() {
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error("Error disconnecting Meta:", error);
-    return new NextResponse("Failed to disconnect", { status: 500 });
+    console.error('Error disconnecting Meta:', error);
+    return new NextResponse('Failed to disconnect', { status: 500 });
   }
 }

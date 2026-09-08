@@ -1,67 +1,67 @@
-"use client";
+'use client';
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
-import { signIn } from "next-auth/react";
-import { Mail, Lock, User, ArrowRight, Loader2 } from "lucide-react";
-import Link from "next/link";
-import { useToast } from "@/contexts/ToastContext";
+import { useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { signIn } from 'next-auth/react';
+import { Mail, Lock, User, ArrowRight, Loader2 } from 'lucide-react';
+import Link from 'next/link';
+import { useToast } from '@/contexts/ToastContext';
 
 export default function RegisterPage() {
   const router = useRouter();
   const { showToast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
   const [formData, setFormData] = useState({
-    name: "",
-    email: "",
-    password: "",
-    confirmPassword: ""
+    name: '',
+    email: '',
+    password: '',
+    confirmPassword: '',
   });
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (formData.password !== formData.confirmPassword) {
-      showToast("As senhas não coincidem", "error");
+      showToast('As senhas não coincidem', 'error');
       return;
     }
 
     setIsLoading(true);
 
     try {
-      const res = await fetch("/api/auth/register", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+      const res = await fetch('/api/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name: formData.name,
           email: formData.email,
-          password: formData.password
+          password: formData.password,
         }),
       });
 
       if (res.ok) {
-        showToast("Conta criada com sucesso! Fazendo login...", "success");
+        showToast('Conta criada com sucesso! Fazendo login...', 'success');
 
         // Auto-login after registration
-        const result = await signIn("credentials", {
+        const result = await signIn('credentials', {
           redirect: false,
           email: formData.email,
           password: formData.password,
         });
 
         if (result?.error) {
-          showToast("Erro ao fazer login automático. Tente entrar manualmente.", "error");
-          router.push("/auth/login");
+          showToast('Erro ao fazer login automático. Tente entrar manualmente.', 'error');
+          router.push('/auth/login');
         } else {
-          router.push("/"); // Will be redirected to complete-profile by middleware
+          router.push('/'); // Will be redirected to complete-profile by middleware
         }
       } else {
         const data = await res.json();
-        showToast(data.error || "Erro ao criar conta", "error");
+        showToast(data.error || 'Erro ao criar conta', 'error');
       }
     } catch (error) {
-      console.error("Erro no registro:", error);
-      showToast("Erro ao criar conta", "error");
+      console.error('Erro no registro:', error);
+      showToast('Erro ao criar conta', 'error');
     } finally {
       setIsLoading(false);
     }
@@ -88,7 +88,10 @@ export default function RegisterPage() {
             <div className="space-y-2">
               <label className="text-sm font-medium text-foreground ml-1">Nome Completo</label>
               <div className="relative group">
-                <User className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground group-focus-within:text-brand-500 transition-colors" size={18} />
+                <User
+                  className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground group-focus-within:text-brand-500 transition-colors"
+                  size={18}
+                />
                 <input
                   type="text"
                   value={formData.name}
@@ -103,7 +106,10 @@ export default function RegisterPage() {
             <div className="space-y-2">
               <label className="text-sm font-medium text-foreground ml-1">Email</label>
               <div className="relative group">
-                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground group-focus-within:text-brand-500 transition-colors" size={18} />
+                <Mail
+                  className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground group-focus-within:text-brand-500 transition-colors"
+                  size={18}
+                />
                 <input
                   type="email"
                   value={formData.email}
@@ -118,7 +124,10 @@ export default function RegisterPage() {
             <div className="space-y-2">
               <label className="text-sm font-medium text-foreground ml-1">Senha</label>
               <div className="relative group">
-                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground group-focus-within:text-brand-500 transition-colors" size={18} />
+                <Lock
+                  className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground group-focus-within:text-brand-500 transition-colors"
+                  size={18}
+                />
                 <input
                   type="password"
                   value={formData.password}
@@ -133,7 +142,10 @@ export default function RegisterPage() {
             <div className="space-y-2">
               <label className="text-sm font-medium text-foreground ml-1">Confirmar Senha</label>
               <div className="relative group">
-                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground group-focus-within:text-brand-500 transition-colors" size={18} />
+                <Lock
+                  className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground group-focus-within:text-brand-500 transition-colors"
+                  size={18}
+                />
                 <input
                   type="password"
                   value={formData.confirmPassword}
@@ -162,8 +174,11 @@ export default function RegisterPage() {
 
           <div className="text-center pt-4 border-t border-white/10">
             <p className="text-sm text-muted-foreground">
-              Já tem uma conta?{" "}
-              <Link href="/auth/login" className="text-brand-400 hover:text-brand-300 font-medium transition-colors hover:underline">
+              Já tem uma conta?{' '}
+              <Link
+                href="/auth/login"
+                className="text-brand-400 hover:text-brand-300 font-medium transition-colors hover:underline"
+              >
                 Faça login
               </Link>
             </p>

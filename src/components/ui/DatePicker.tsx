@@ -12,7 +12,7 @@ import {
   setYear,
   getYear,
   isValid,
-  parseISO
+  parseISO,
 } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, ChevronDown } from 'lucide-react';
@@ -24,21 +24,16 @@ interface DatePickerProps {
   className?: string;
 }
 
-export const DatePicker: React.FC<DatePickerProps> = ({ value, onChange, placeholder = "Selecione uma data", className }) => {
+export const DatePicker: React.FC<DatePickerProps> = ({
+  value,
+  onChange,
+  placeholder = 'Selecione uma data',
+  className,
+}) => {
   const [isOpen, setIsOpen] = useState(false);
   const [viewDate, setViewDate] = useState(new Date());
   const [viewMode, setViewMode] = useState<'days' | 'months'>('days'); // 'days' or 'months'
   const containerRef = useRef<HTMLDivElement>(null);
-
-  // Initialize viewDate from value if valid
-  useEffect(() => {
-    if (value) {
-      const date = parseISO(value);
-      if (isValid(date)) {
-        setViewDate(date);
-      }
-    }
-  }, [value]);
 
   // Close on click outside
   useEffect(() => {
@@ -51,6 +46,16 @@ export const DatePicker: React.FC<DatePickerProps> = ({ value, onChange, placeho
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  const handleToggleOpen = () => {
+    if (!isOpen && value) {
+      const date = parseISO(value);
+      if (isValid(date)) {
+        setViewDate(date);
+      }
+    }
+    setIsOpen(!isOpen);
+  };
 
   const handleDayClick = (day: Date) => {
     onChange(format(day, 'yyyy-MM-dd'));
@@ -102,8 +107,10 @@ export const DatePicker: React.FC<DatePickerProps> = ({ value, onChange, placeho
               onChange={(e) => setViewDate(setYear(monthDate, parseInt(e.target.value)))}
               className="bg-transparent border-none p-0 cursor-pointer focus:ring-0 font-semibold appearance-none hover:bg-accent px-2 py-1 rounded-md transition-colors"
             >
-              {Array.from({ length: 100 }, (_, i) => getYear(new Date()) - 80 + i).map(year => (
-                <option key={year} value={year} className="bg-popover text-popover-foreground">{year}</option>
+              {Array.from({ length: 100 }, (_, i) => getYear(new Date()) - 80 + i).map((year) => (
+                <option key={year} value={year} className="bg-popover text-popover-foreground">
+                  {year}
+                </option>
               ))}
             </select>
           </div>
@@ -139,7 +146,9 @@ export const DatePicker: React.FC<DatePickerProps> = ({ value, onChange, placeho
           <>
             <div className="grid grid-cols-7 gap-1 text-center mb-2">
               {['S', 'T', 'Q', 'Q', 'S', 'S', 'D'].map((d, i) => (
-                <div key={i} className="text-xs font-medium text-muted-foreground">{d}</div>
+                <div key={i} className="text-xs font-medium text-muted-foreground">
+                  {d}
+                </div>
               ))}
             </div>
 
@@ -173,20 +182,22 @@ export const DatePicker: React.FC<DatePickerProps> = ({ value, onChange, placeho
     );
   };
 
-  const displayDate = value && isValid(parseISO(value))
-    ? format(parseISO(value), 'dd/MM/yyyy')
-    : '';
+  const displayDate =
+    value && isValid(parseISO(value)) ? format(parseISO(value), 'dd/MM/yyyy') : '';
 
   return (
     <div className={`relative ${className}`} ref={containerRef}>
       <div
-        onClick={() => setIsOpen(!isOpen)}
+        onClick={handleToggleOpen}
         className="w-full px-4 py-2 bg-secondary/30 border border-border rounded-xl focus-within:ring-2 focus-within:ring-brand-500/50 transition-all cursor-pointer flex items-center justify-between group"
       >
-        <span className={displayDate ? "text-foreground" : "text-muted-foreground"}>
+        <span className={displayDate ? 'text-foreground' : 'text-muted-foreground'}>
           {displayDate || placeholder}
         </span>
-        <CalendarIcon className="text-muted-foreground group-hover:text-brand-500 transition-colors" size={18} />
+        <CalendarIcon
+          className="text-muted-foreground group-hover:text-brand-500 transition-colors"
+          size={18}
+        />
       </div>
 
       {isOpen && (
