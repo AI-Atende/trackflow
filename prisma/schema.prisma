@@ -57,6 +57,12 @@ model Client {
   // Views
   tableViews      TableView[]
 
+  // Lead tracking (site -> WhatsApp attribution)
+  pixelSessions   PixelSession[]
+  trackingLinks   TrackingLink[]
+  trackedMessages TrackedMessage[]
+  kommoFieldMapping KommoFieldMapping?
+
   createdAt      DateTime            @default(now())
   updatedAt      DateTime            @updatedAt
 }
@@ -215,4 +221,136 @@ model TableView {
   updatedAt   DateTime @updatedAt
 
   @@index([clientId, dataSource])
+}
+
+// ---------------------------------------------------------------------------
+// Lead tracking (site -> WhatsApp attribution) — replaces Tintim. See plan doc
+// "TrackFlow como rastreador de leads" for the full design/rationale.
+// ---------------------------------------------------------------------------
+
+// A browser session on the client's site, captured by the TrackFlow pixel. Holds the UTM/click
+// params present when the visitor arrived, so they can be reattached to whatever WhatsApp
+// conversation that visitor starts later. `sessionCode` (short, generated at capture time) is
+// the actual value embedded into that visitor's WhatsApp message — NOT a per-button static
+// code, since many different visitors (each with their own UTMs) click the same site button.
+// The pixel script asks /api/public/pixel/wa-link for a ready-to-use wa.me href per click,
+// which stitches this session's own code into the TrackingLink's message template.
+model PixelSession {
+  id       String @id @default(cuid())
+  clientId String
+  client   Client @relation(fields: [clientId], references: [id])
+
+  sessionCode String  @unique
+  utmSource   String?
+  utmMedium   String?
+  utmCampaign String?
+  utmContent  String?
+  utmTerm     String?
+  fbclid      String?
+  gclid       String?
+  gbraid      String?
+  wbraid      String?
+  landingUrl  String?
+
+  // Set when a wa.me link is generated for this session — which button/template was used,
+  // for reporting ("which button converts") and as the TIME_WINDOW fallback's best guess.
+  lastTrackingLinkId String?
+  lastTrackingLink   TrackingLink? @relation(fields: [lastTrackingLinkId], references: [id])
+
+  createdAt DateTime  @default(now())
+  matchedAt DateTime? // set once a TrackedMessage consumes this session
+
+  @@index([clientId])
+  @@index([createdAt])
+}
+
+enum CodingStrategy {
+  INVISIBLE // zero-width chars encoding the visitor's PixelSession code, embedded in the text
+  VISIBLE_CODE // short human-readable code appended to the text
+  TIME_WINDOW // no code at all — matching relies purely on receive-time correlation
+}
+
+// A client-configured "WhatsApp button" for their site: which number it opens, the message
+// template, and how the visitor's session code gets embedded into that message. Reusable
+// across every visitor who clicks it — the actual code embedded differs per PixelSession.
+model TrackingLink {
+  id       String @id @default(cuid())
+  clientId String
+  client   Client @relation(fields: [clientId], references: [id])
+
+  label           String
+  waNumber        String
+  messageTemplate String
+  codingStrategy  CodingStrategy @default(INVISIBLE)
+
+  pixelSessions   PixelSession[]
+  trackedMessages TrackedMessage[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([clientId])
+}
+
+enum MatchStrategy {
+  CODE_INVISIBLE
+  CODE_VISIBLE
+  TIME_WINDOW
+  UNMATCHED
+}
+
+enum KommoSyncStatus {
+  PENDING
+  SYNCED
+  FAILED
+  SKIPPED // no match found, or Kommo not configured for this client
+}
+
+// Every inbound WhatsApp message relayed from the portal, stored unconditionally BEFORE any
+// matching/Kommo-write is attempted — this table is the source of truth; the Kommo push is a
+// best-effort projection on top of it, never the only copy (see plan doc).
+model TrackedMessage {
+  id       String @id @default(cuid())
+  clientId String
+  client   Client @relation(fields: [clientId], references: [id])
+
+  waId        String
+  text         String
+  receivedAt   DateTime
+
+  matchStrategy        MatchStrategy @default(UNMATCHED)
+  matchedPixelSessionId String?
+  matchedTrackingLinkId String?
+  matchedTrackingLink   TrackingLink? @relation(fields: [matchedTrackingLinkId], references: [id])
+
+  kommoLeadId     String?
+  kommoSyncStatus KommoSyncStatus @default(PENDING)
+  kommoSyncedAt   DateTime?
+  kommoSyncError  String?
+
+  createdAt DateTime @default(now())
+
+  @@index([clientId])
+  @@index([waId])
+  @@index([receivedAt])
+  @@index([matchedPixelSessionId])
+}
+
+// Per-client mapping of UTM/click-id fields to that client's Kommo custom-field IDs (IDs are
+// per-Kommo-account, never portable across clients — resolved once here instead of live on
+// every write). Filled in by the client on a small settings screen.
+model KommoFieldMapping {
+  id       String @id @default(cuid())
+  clientId String @unique
+  client   Client @relation(fields: [clientId], references: [id])
+
+  utmSourceFieldId   Int?
+  utmMediumFieldId   Int?
+  utmCampaignFieldId Int?
+  utmContentFieldId  Int?
+  utmTermFieldId     Int?
+  fbclidFieldId      Int?
+  gclidFieldId       Int?
+
+  updatedAt DateTime @updatedAt
 }

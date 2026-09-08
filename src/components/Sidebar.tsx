@@ -71,6 +71,7 @@ export const Sidebar = ({
   const navItems = [
     { href: '/', label: 'Dashboard Geral', icon: BarChart3 },
     { href: '/campaigns', label: 'Campanhas', icon: Target },
+    { href: '/tracking-links', label: 'Rastreamento de Leads', icon: TrendingUp },
     { href: '/settings', label: 'Configurações', icon: Settings },
     { href: '/help', label: 'Ajuda', icon: HelpCircle },
   ];
