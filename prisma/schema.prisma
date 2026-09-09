@@ -397,9 +397,13 @@ model MappedAd {
   adsetExternalId String // "ad set" on Meta, "ad group" on Google — unified name here
   adsetName       String
 
-  lastSyncedAt DateTime @default(now())
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  lastSyncedAt DateTime  @default(now())
+  // Soft-delete marker — set when a sync no longer sees this adExternalId in the platform's
+  // account. Never deleted for real: past leads may still reference it via resolvedAdMatchConfidence,
+  // and the ad can reappear (cleared back to null) if it's ever un-archived.
+  removedAt    DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 
   @@unique([clientId, platform, adExternalId])
   @@index([clientId, platform])

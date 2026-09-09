@@ -32,6 +32,7 @@ interface MappedAd {
   adsetExternalId: string;
   adsetName: string;
   lastSyncedAt: string;
+  removedAt: string | null;
 }
 
 type StatusFilter = 'all' | 'active' | 'paused' | 'other';
@@ -345,13 +346,23 @@ export default function AdCatalogPage() {
                                   <button
                                     key={ad.id}
                                     onClick={() => setSelectedAd(ad)}
-                                    className="w-full flex items-center justify-between gap-3 text-sm pl-4 py-2 rounded-lg hover:bg-secondary/40 transition-colors text-left"
+                                    className={`w-full flex items-center justify-between gap-3 text-sm pl-4 py-2 rounded-lg hover:bg-secondary/40 transition-colors text-left ${ad.removedAt ? 'opacity-50' : ''}`}
                                   >
                                     <span className="truncate">{ad.adName}</span>
-                                    <span
-                                      className={`text-xs shrink-0 border px-2 py-0.5 rounded-full font-medium ${statusBadgeClasses(ad.adStatus)}`}
-                                    >
-                                      {ad.adStatus}
+                                    <span className="flex items-center gap-1.5 shrink-0">
+                                      {ad.removedAt && (
+                                        <span
+                                          className="text-xs border px-2 py-0.5 rounded-full font-medium bg-secondary text-muted-foreground border-border"
+                                          title={`Removido da conta em ${format(new Date(ad.removedAt), 'dd/MM/yyyy HH:mm')}`}
+                                        >
+                                          Removido
+                                        </span>
+                                      )}
+                                      <span
+                                        className={`text-xs border px-2 py-0.5 rounded-full font-medium ${statusBadgeClasses(ad.adStatus)}`}
+                                      >
+                                        {ad.adStatus}
+                                      </span>
                                     </span>
                                   </button>
                                 ))}
@@ -381,11 +392,18 @@ export default function AdCatalogPage() {
             <div className="p-6 border-b border-border flex items-center justify-between bg-secondary/30">
               <div className="min-w-0">
                 <h2 className="font-bold text-lg text-foreground truncate">{selectedAd.adName}</h2>
-                <span
-                  className={`inline-block mt-1 text-xs border px-2 py-0.5 rounded-full font-medium ${statusBadgeClasses(selectedAd.adStatus)}`}
-                >
-                  {selectedAd.adStatus}
-                </span>
+                <div className="flex items-center gap-1.5 mt-1">
+                  <span
+                    className={`inline-block text-xs border px-2 py-0.5 rounded-full font-medium ${statusBadgeClasses(selectedAd.adStatus)}`}
+                  >
+                    {selectedAd.adStatus}
+                  </span>
+                  {selectedAd.removedAt && (
+                    <span className="inline-block text-xs border px-2 py-0.5 rounded-full font-medium bg-secondary text-muted-foreground border-border">
+                      Removido da conta
+                    </span>
+                  )}
+                </div>
               </div>
               <button
                 onClick={() => setSelectedAd(null)}
@@ -426,6 +444,14 @@ export default function AdCatalogPage() {
                     {format(new Date(selectedAd.lastSyncedAt), 'dd/MM/yyyy HH:mm')}
                   </p>
                 </div>
+                {selectedAd.removedAt && (
+                  <div className="col-span-2">
+                    <p className="text-xs text-muted-foreground">Removido da conta em</p>
+                    <p className="font-medium">
+                      {format(new Date(selectedAd.removedAt), 'dd/MM/yyyy HH:mm')}
+                    </p>
+                  </div>
+                )}
               </div>
             </div>
           </div>

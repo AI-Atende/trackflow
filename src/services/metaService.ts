@@ -235,18 +235,23 @@ export async function fetchMetaHierarchy(
   let apiAdSets: MetaApiAdSet[] = [];
   let apiAds: MetaApiAd[] = [];
 
+  // adAccountId is the bare, unprefixed id stored in MetaAdAccount (the `account_id` field from
+  // /me/adaccounts) — the DB lookup above needs it bare, but the campaigns/adsets/ads edges only
+  // exist on the `act_<id>` node. Same fix already applied in adCatalogSync.ts's syncMetaAdCatalog.
+  const apiAdAccountId = adAccountId.startsWith('act_') ? adAccountId : `act_${adAccountId}`;
+
   try {
     const fields = 'id,name,status,effective_status';
     const [camps, adsets, ads] = await Promise.all([
-      fetchAllMetaItems<MetaApiCampaign>(`/${adAccountId}/campaigns`, metaAccount.accessToken, {
+      fetchAllMetaItems<MetaApiCampaign>(`/${apiAdAccountId}/campaigns`, metaAccount.accessToken, {
         fields,
         limit: 500,
       }),
-      fetchAllMetaItems<MetaApiAdSet>(`/${adAccountId}/adsets`, metaAccount.accessToken, {
+      fetchAllMetaItems<MetaApiAdSet>(`/${apiAdAccountId}/adsets`, metaAccount.accessToken, {
         fields: `${fields},campaign_id`,
         limit: 500,
       }),
-      fetchAllMetaItems<MetaApiAd>(`/${adAccountId}/ads`, metaAccount.accessToken, {
+      fetchAllMetaItems<MetaApiAd>(`/${apiAdAccountId}/ads`, metaAccount.accessToken, {
         fields: `${fields},adset_id`,
         limit: 500,
       }),

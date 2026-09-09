@@ -24,6 +24,24 @@ interface MetaApiAd {
 }
 
 /**
+ * Soft-deletes MappedAd rows for ads that the API no longer returns (`adExternalId` not in
+ * `seenExternalIds`) — never a hard delete, since past leads may still reference the ad via
+ * TrackedMessage.resolvedAdMatchConfidence, and an ad can come back (`removedAt` gets reset to
+ * null by the upsert `update` clause the next time it's seen).
+ */
+async function markMissingAdsAsRemoved(
+  clientId: string,
+  platform: 'META' | 'GOOGLE',
+  seenExternalIds: string[],
+): Promise<number> {
+  const result = await prisma.mappedAd.updateMany({
+    where: { clientId, platform, adExternalId: { notIn: seenExternalIds }, removedAt: null },
+    data: { removedAt: new Date() },
+  });
+  return result.count;
+}
+
+/**
  * Pulls the FULL current campaign/adset/ad structure for a client's Meta ad account (no date
  * filter — this is a catalog, not a metrics sync) and upserts it into MappedAd. Called both by
  * the manual "Sincronizar agora" button (api/ad-catalog/sync) and the periodic cron
@@ -113,13 +131,23 @@ export async function syncMetaAdCatalog(clientId: string): Promise<{ synced: num
         adsetExternalId: adset.id,
         adsetName: adset.name,
         lastSyncedAt: new Date(),
+        removedAt: null, // in case it was previously marked removed and has since come back
       },
     });
     synced++;
   }
 
+  // Orphaned ads are still returned by the API (they exist in the account, just missing a
+  // resolvable adset/campaign on our end) — count them as "seen" too, so they aren't wrongly
+  // marked removed.
+  const removed = await markMissingAdsAsRemoved(
+    clientId,
+    'META',
+    ads.map((ad) => ad.id),
+  );
+
   console.log(
-    `[adCatalogSync] client ${clientId}: fetched ${campaigns.length} campaign(s), ${adsets.length} adset(s), ${ads.length} ad(s) — synced ${synced}, orphaned ${orphaned}`,
+    `[adCatalogSync] client ${clientId}: fetched ${campaigns.length} campaign(s), ${adsets.length} adset(s), ${ads.length} ad(s) — synced ${synced}, orphaned ${orphaned}, removed ${removed}`,
   );
 
   return { synced };
@@ -240,13 +268,20 @@ export async function syncGoogleAdCatalog(clientId: string): Promise<{ synced: n
         adsetExternalId,
         adsetName,
         lastSyncedAt: new Date(),
+        removedAt: null, // in case it was previously marked removed and has since come back
       },
     });
     synced++;
   }
 
+  const removed = await markMissingAdsAsRemoved(
+    clientId,
+    'GOOGLE',
+    ads.map((row) => String(row.ad_group_ad.ad.id)),
+  );
+
   console.log(
-    `[adCatalogSync] client ${clientId}: fetched ${campaigns.length} campaign(s), ${adGroups.length} adset(s), ${ads.length} ad(s) [Google] — synced ${synced}, orphaned ${orphaned}`,
+    `[adCatalogSync] client ${clientId}: fetched ${campaigns.length} campaign(s), ${adGroups.length} adset(s), ${ads.length} ad(s) [Google] — synced ${synced}, orphaned ${orphaned}, removed ${removed}`,
   );
 
   return { synced };
