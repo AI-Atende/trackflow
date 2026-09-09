@@ -62,6 +62,7 @@ model Client {
   trackingLinks   TrackingLink[]
   trackedMessages TrackedMessage[]
   kommoFieldMapping KommoFieldMapping?
+  mappedAds       MappedAd[]
 
   createdAt      DateTime            @default(now())
   updatedAt      DateTime            @updatedAt
@@ -331,6 +332,11 @@ model TrackedMessage {
   kommoSyncedAt   DateTime?
   kommoSyncError  String?
 
+  // How the resolved MappedAd (if any) was found — "id" (reliable, dynamic UTM token) vs "name"
+  // (fallback match against MappedAd.name, lower confidence) vs null (no ad-catalog match at
+  // all). Audit-only — doesn't change what's written to Kommo, see lib/adCatalogMatch.ts.
+  resolvedAdMatchConfidence String?
+
   createdAt DateTime @default(now())
 
   @@index([clientId])
@@ -355,5 +361,47 @@ model KommoFieldMapping {
   fbclidFieldId      Int?
   gclidFieldId       Int?
 
+  // Resolved catalog IDs (see MappedAd) — separate fields from the raw UTM text above, so the
+  // client can see both what was captured and what it resolved to.
+  campaignIdFieldId Int?
+  adsetIdFieldId    Int?
+  adIdFieldId       Int?
+
   updatedAt DateTime @updatedAt
+}
+
+enum AdPlatform {
+  META
+  GOOGLE
+}
+
+// Current campaign/adset/ad structure for a client's connected ad accounts — a catalog, not a
+// time series (that's *AdInsightDaily). Synced manually or by cron (lib/adCatalogSync.ts); no
+// webhook exists on either platform for structural changes, so this is poll-based by design.
+// Flattened at ad level (the unit the client cares about) with campaign/adset denormalized onto
+// each row, so resolving a UTM captured at any granularity never needs a recursive join.
+model MappedAd {
+  id       String @id @default(cuid())
+  clientId String
+  client   Client @relation(fields: [clientId], references: [id])
+
+  platform AdPlatform
+
+  adExternalId String
+  adName       String
+  adStatus     String // raw status string from the platform
+
+  campaignExternalId String
+  campaignName       String
+
+  adsetExternalId String // "ad set" on Meta, "ad group" on Google — unified name here
+  adsetName       String
+
+  lastSyncedAt DateTime @default(now())
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([clientId, platform, adExternalId])
+  @@index([clientId, platform])
+  @@index([clientId, platform, campaignExternalId])
 }

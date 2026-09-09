@@ -13,6 +13,7 @@ import {
   ChevronLeft,
   ChevronRight,
   HelpCircle,
+  Layers,
 } from 'lucide-react';
 import { Select } from '@/components/ui/Select';
 import { useState, useEffect } from 'react';
@@ -72,6 +73,7 @@ export const Sidebar = ({
     { href: '/', label: 'Dashboard Geral', icon: BarChart3 },
     { href: '/campaigns', label: 'Campanhas', icon: Target },
     { href: '/tracking-links', label: 'Rastreamento de Leads', icon: TrendingUp },
+    { href: '/ad-catalog', label: 'Catálogo de Anúncios', icon: Layers },
     { href: '/settings', label: 'Configurações', icon: Settings },
     { href: '/help', label: 'Ajuda', icon: HelpCircle },
   ];

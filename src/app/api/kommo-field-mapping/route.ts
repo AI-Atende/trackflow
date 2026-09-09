@@ -34,6 +34,9 @@ export async function POST(req: NextRequest) {
     utmTermFieldId: body.utmTermFieldId ?? null,
     fbclidFieldId: body.fbclidFieldId ?? null,
     gclidFieldId: body.gclidFieldId ?? null,
+    campaignIdFieldId: body.campaignIdFieldId ?? null,
+    adsetIdFieldId: body.adsetIdFieldId ?? null,
+    adIdFieldId: body.adIdFieldId ?? null,
   };
 
   const mapping = await prisma.kommoFieldMapping.upsert({

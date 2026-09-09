@@ -106,16 +106,91 @@ async function matchSession(
   return { matchStrategy: 'UNMATCHED', matchedSession: null };
 }
 
+interface ResolvedAdMatch {
+  confidence: 'id' | 'name' | null;
+  adExternalId: string | null;
+  campaignExternalId: string | null;
+  adsetExternalId: string | null;
+}
+
+// Resolves the session's captured UTM values against the MappedAd catalog (see adCatalogSync.ts),
+// preferring the platform's dynamic ID tokens ({{ad.id}}/{{campaign.id}} etc, landing in
+// utmContent/utmCampaign) over legacy ads that only ever carried human-readable names — see plan
+// doc "TrackFlow — resolução por ID com fallback por nome".
+async function resolveAdMatch(
+  clientId: string,
+  session: { utmContent: string | null; utmCampaign: string | null },
+): Promise<ResolvedAdMatch> {
+  if (session.utmContent) {
+    const byAdId = await prisma.mappedAd.findFirst({
+      where: { clientId, adExternalId: session.utmContent },
+    });
+    if (byAdId) {
+      return {
+        confidence: 'id',
+        adExternalId: byAdId.adExternalId,
+        campaignExternalId: byAdId.campaignExternalId,
+        adsetExternalId: byAdId.adsetExternalId,
+      };
+    }
+  }
+
+  if (session.utmCampaign) {
+    const byCampaignId = await prisma.mappedAd.findFirst({
+      where: { clientId, campaignExternalId: session.utmCampaign },
+    });
+    if (byCampaignId) {
+      return {
+        confidence: 'id',
+        adExternalId: null,
+        campaignExternalId: byCampaignId.campaignExternalId,
+        adsetExternalId: null,
+      };
+    }
+  }
+
+  if (session.utmContent) {
+    const byAdName = await prisma.mappedAd.findFirst({
+      where: { clientId, adName: session.utmContent },
+    });
+    if (byAdName) {
+      return {
+        confidence: 'name',
+        adExternalId: byAdName.adExternalId,
+        campaignExternalId: byAdName.campaignExternalId,
+        adsetExternalId: byAdName.adsetExternalId,
+      };
+    }
+  }
+
+  if (session.utmCampaign) {
+    const byCampaignName = await prisma.mappedAd.findFirst({
+      where: { clientId, campaignName: session.utmCampaign },
+    });
+    if (byCampaignName) {
+      return {
+        confidence: 'name',
+        adExternalId: null,
+        campaignExternalId: byCampaignName.campaignExternalId,
+        adsetExternalId: null,
+      };
+    }
+  }
+
+  return { confidence: null, adExternalId: null, campaignExternalId: null, adsetExternalId: null };
+}
+
 async function syncToKommo(
   clientId: string,
   waId: string,
   session: NonNullable<Awaited<ReturnType<typeof prisma.pixelSession.findFirst>>>,
   trackedMessageId: string,
 ): Promise<void> {
-  const [client, integrationConfig, fieldMapping] = await Promise.all([
+  const [client, integrationConfig, fieldMapping, adMatch] = await Promise.all([
     prisma.client.findUnique({ where: { id: clientId } }),
     prisma.integrationConfig.findFirst({ where: { clientId, provider: 'KOMMO' } }),
     prisma.kommoFieldMapping.findUnique({ where: { clientId } }),
+    resolveAdMatch(clientId, session),
   ]);
 
   const subdomain = (integrationConfig?.config as { subdomain?: string } | null)?.subdomain;
@@ -125,6 +200,7 @@ async function syncToKommo(
       data: {
         kommoSyncStatus: 'SKIPPED',
         kommoSyncError: 'Kommo não configurado ou campos não mapeados',
+        resolvedAdMatchConfidence: adMatch.confidence,
       },
     });
     return;
@@ -140,6 +216,7 @@ async function syncToKommo(
       data: {
         kommoSyncStatus: 'SKIPPED',
         kommoSyncError: `Nenhum lead encontrado no Kommo para ${waId}`,
+        resolvedAdMatchConfidence: adMatch.confidence,
       },
     });
     return;
@@ -156,6 +233,11 @@ async function syncToKommo(
     fieldValue(fieldMapping.utmTermFieldId, session.utmTerm),
     fieldValue(fieldMapping.fbclidFieldId, session.fbclid),
     fieldValue(fieldMapping.gclidFieldId, session.gclid),
+    // Resolved-by-catalog IDs — written alongside (not instead of) the raw UTM text above, so
+    // the client can see both what was captured and what it resolved to.
+    fieldValue(fieldMapping.campaignIdFieldId, adMatch.campaignExternalId),
+    fieldValue(fieldMapping.adsetIdFieldId, adMatch.adsetExternalId),
+    fieldValue(fieldMapping.adIdFieldId, adMatch.adExternalId),
   ].filter((v): v is NonNullable<typeof v> => v !== null);
 
   if (customFieldsValues.length === 0) {
@@ -168,6 +250,7 @@ async function syncToKommo(
         kommoLeadId: String(lead.id),
         kommoSyncStatus: 'SKIPPED',
         kommoSyncError: 'Lead encontrado, mas a sessão não tinha UTM/click-id pra gravar',
+        resolvedAdMatchConfidence: adMatch.confidence,
       },
     });
     return;
@@ -177,6 +260,11 @@ async function syncToKommo(
 
   await prisma.trackedMessage.update({
     where: { id: trackedMessageId },
-    data: { kommoLeadId: String(lead.id), kommoSyncStatus: 'SYNCED', kommoSyncedAt: new Date() },
+    data: {
+      kommoLeadId: String(lead.id),
+      kommoSyncStatus: 'SYNCED',
+      kommoSyncedAt: new Date(),
+      resolvedAdMatchConfidence: adMatch.confidence,
+    },
   });
 }

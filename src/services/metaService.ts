@@ -124,8 +124,8 @@ export async function fetchMetaCampaigns(
 import { metaGet } from '@/lib/meta/client';
 import { AdCampaign, CampaignHierarchy } from '@/types';
 
-// Helper to fetch all pages
-async function fetchAllMetaItems<T>(
+// Helper to fetch all pages — exported for reuse by lib/adCatalogSync.ts
+export async function fetchAllMetaItems<T>(
   path: string,
   accessToken: string,
   params: Record<string, string | number | boolean | undefined> = {},

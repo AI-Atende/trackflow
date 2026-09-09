@@ -45,6 +45,9 @@ const FIELD_MAPPING_KEYS = [
   { key: 'utmTermFieldId', label: 'UTM Term' },
   { key: 'fbclidFieldId', label: 'Facebook Click ID (fbclid)' },
   { key: 'gclidFieldId', label: 'Google Click ID (gclid)' },
+  { key: 'campaignIdFieldId', label: 'ID da campanha (resolvido pelo catálogo)' },
+  { key: 'adsetIdFieldId', label: 'ID do conjunto de anúncios (resolvido pelo catálogo)' },
+  { key: 'adIdFieldId', label: 'ID do anúncio (resolvido pelo catálogo)' },
 ] as const;
 
 export default function TrackingLinksPage() {
