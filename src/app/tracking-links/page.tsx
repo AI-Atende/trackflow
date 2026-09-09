@@ -150,8 +150,13 @@ export default function TrackingLinksPage() {
     await fetchLinks();
   };
 
-  const copySnippet = (linkId: string) => {
-    const snippet = `<a href="#" data-trackflow-link="${linkId}">Fale conosco no WhatsApp</a>`;
+  const copySnippet = (link: TrackingLink) => {
+    // Fallback href is a real (untracked) wa.me link, not "#" — some sites run their own
+    // smooth-scroll/anchor scripts that call document.querySelector(this.getAttribute('href'))
+    // on click, which throws once our script rewrites "#" into a full URL. A real link also
+    // means the button still works if our script fails to load at all.
+    const fallbackHref = `https://wa.me/${link.waNumber}`;
+    const snippet = `<a href="${fallbackHref}" data-trackflow-link="${link.id}">Fale conosco no WhatsApp</a>`;
     navigator.clipboard.writeText(snippet);
     showToast('Trecho HTML copiado!', 'success');
   };
@@ -274,7 +279,7 @@ export default function TrackingLinksPage() {
                         </p>
                       </div>
                       <div className="flex items-center gap-2">
-                        <Button variant="outline" size="sm" onClick={() => copySnippet(link.id)}>
+                        <Button variant="outline" size="sm" onClick={() => copySnippet(link)}>
                           <Copy size={14} className="mr-1" /> Copiar HTML
                         </Button>
                         <Button variant="ghost" size="icon" onClick={() => deleteLink(link.id)}>

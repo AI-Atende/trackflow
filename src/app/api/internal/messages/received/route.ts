@@ -158,9 +158,22 @@ async function syncToKommo(
     fieldValue(fieldMapping.gclidFieldId, session.gclid),
   ].filter((v): v is NonNullable<typeof v> => v !== null);
 
-  if (customFieldsValues.length > 0) {
-    await kommo.leads.updateOne(lead.id, { custom_fields_values: customFieldsValues });
+  if (customFieldsValues.length === 0) {
+    // Lead found, but the matched session had no UTM/click-id to write — nothing was actually
+    // sent to Kommo. Marking this SYNCED (as before) was misleading: it looked like a
+    // successful write when no API call ever happened.
+    await prisma.trackedMessage.update({
+      where: { id: trackedMessageId },
+      data: {
+        kommoLeadId: String(lead.id),
+        kommoSyncStatus: 'SKIPPED',
+        kommoSyncError: 'Lead encontrado, mas a sessão não tinha UTM/click-id pra gravar',
+      },
+    });
+    return;
   }
+
+  await kommo.leads.updateOne(lead.id, { custom_fields_values: customFieldsValues });
 
   await prisma.trackedMessage.update({
     where: { id: trackedMessageId },
