@@ -36,19 +36,26 @@ export async function POST(req: NextRequest) {
     gclid: body.gclid ?? null,
     gbraid: body.gbraid ?? null,
     wbraid: body.wbraid ?? null,
+    fbp: body.fbp ?? null,
   };
-  const hasNewTrackingData = Object.values(incomingTrackingData).some((v) => v !== null);
 
   if (body.existingSessionCode) {
     const existing = await prisma.pixelSession.findUnique({
       where: { sessionCode: body.existingSessionCode },
     });
     if (existing && existing.clientId === client.id) {
-      if (hasNewTrackingData) {
-        await prisma.pixelSession.update({
-          where: { id: existing.id },
-          data: { ...incomingTrackingData, landingUrl: body.landingUrl ?? existing.landingUrl },
-        });
+      // Field-by-field merge, not a blanket overwrite: _fbp is present on almost every page
+      // load once Meta's own Pixel is installed, so "any new tracking data at all" is true way
+      // more often than "the URL actually has fresh UTMs" — a blanket overwrite would null out
+      // e.g. utmSource captured on an earlier page just because this page only has _fbp.
+      const fieldUpdate: Record<string, string> = {};
+      for (const [key, value] of Object.entries(incomingTrackingData)) {
+        if (value !== null) fieldUpdate[key] = value;
+      }
+      if (body.landingUrl) fieldUpdate.landingUrl = body.landingUrl;
+
+      if (Object.keys(fieldUpdate).length > 0) {
+        await prisma.pixelSession.update({ where: { id: existing.id }, data: fieldUpdate });
       }
       return withPixelCors(NextResponse.json({ sessionCode: existing.sessionCode }));
     }

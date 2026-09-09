@@ -250,6 +250,9 @@ model PixelSession {
   gclid       String?
   gbraid      String?
   wbraid      String?
+  // Meta's browser-id cookie (_fbp) — not a click id, doesn't feed Kommo today, but Meta wants
+  // it alongside fbc for Conversions API matching once that's built (see docs/future-considerations.md).
+  fbp         String?
   landingUrl  String?
 
   // Set when a wa.me link is generated for this session — which button/template was used,

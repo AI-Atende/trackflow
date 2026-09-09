@@ -30,6 +30,13 @@ interface KommoField {
   code: string | null;
 }
 
+interface WhatsAppNumber {
+  phoneNumberId: string;
+  displayNumber: string;
+}
+
+const OTHER_NUMBER = '__other__';
+
 const FIELD_MAPPING_KEYS = [
   { key: 'utmSourceFieldId', label: 'UTM Source' },
   { key: 'utmMediumFieldId', label: 'UTM Medium' },
@@ -50,6 +57,8 @@ export default function TrackingLinksPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [label, setLabel] = useState('');
   const [waNumber, setWaNumber] = useState('');
+  const [numberChoice, setNumberChoice] = useState(OTHER_NUMBER);
+  const [registeredNumbers, setRegisteredNumbers] = useState<WhatsAppNumber[]>([]);
   const [messageTemplate, setMessageTemplate] = useState('Olá! Quero saber mais.');
   const [codingStrategy, setCodingStrategy] = useState<TrackingLink['codingStrategy']>('INVISIBLE');
   const [isSaving, setIsSaving] = useState(false);
@@ -82,6 +91,14 @@ export default function TrackingLinksPage() {
     }
   }, []);
 
+  const fetchRegisteredNumbers = useCallback(async () => {
+    const res = await fetch('/api/whatsapp-numbers');
+    if (res.ok) {
+      const data = await res.json();
+      setRegisteredNumbers(data.numbers ?? []);
+    }
+  }, []);
+
   useEffect(() => {
     // Data fetch on mount — the setState calls happen asynchronously inside these callbacks,
     // after an await, not synchronously in the effect body; this is the standard "fetch on
@@ -89,7 +106,19 @@ export default function TrackingLinksPage() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchLinks();
     fetchFieldMapping();
-  }, [fetchLinks, fetchFieldMapping]);
+    fetchRegisteredNumbers();
+  }, [fetchLinks, fetchFieldMapping, fetchRegisteredNumbers]);
+
+  const handleNumberChoice = (choice: string) => {
+    setNumberChoice(choice);
+    if (choice === OTHER_NUMBER) {
+      setWaNumber('');
+      return;
+    }
+    const selected = registeredNumbers.find((n) => n.phoneNumberId === choice);
+    // wa.me needs plain digits — the portal's displayNumber is formatted for humans (+55 11 ...).
+    setWaNumber(selected ? selected.displayNumber.replace(/\D/g, '') : '');
+  };
 
   const loadAvailableFields = async () => {
     setIsLoadingFields(true);
@@ -133,6 +162,7 @@ export default function TrackingLinksPage() {
       if (!res.ok) throw new Error('Falha ao criar link');
       setLabel('');
       setWaNumber('');
+      setNumberChoice(OTHER_NUMBER);
       setMessageTemplate('Olá! Quero saber mais.');
       setCodingStrategy('INVISIBLE');
       await fetchLinks();
@@ -237,12 +267,28 @@ export default function TrackingLinksPage() {
                   value={label}
                   onChange={(e) => setLabel(e.target.value)}
                 />
-                <input
-                  className="border border-border rounded-lg px-3 py-2 bg-background"
-                  placeholder="Número do WhatsApp (ex: 5511999998888)"
-                  value={waNumber}
-                  onChange={(e) => setWaNumber(e.target.value)}
-                />
+                <div className="space-y-2">
+                  <Select
+                    options={[
+                      ...registeredNumbers.map((n) => ({
+                        value: n.phoneNumberId,
+                        label: n.displayNumber,
+                      })),
+                      { value: OTHER_NUMBER, label: 'Outro número...' },
+                    ]}
+                    value={numberChoice}
+                    onChange={handleNumberChoice}
+                    placeholder="Número do WhatsApp"
+                  />
+                  {numberChoice === OTHER_NUMBER && (
+                    <input
+                      className="border border-border rounded-lg px-3 py-2 bg-background w-full"
+                      placeholder="Número do WhatsApp (ex: 5511999998888)"
+                      value={waNumber}
+                      onChange={(e) => setWaNumber(e.target.value)}
+                    />
+                  )}
+                </div>
                 <textarea
                   className="border border-border rounded-lg px-3 py-2 bg-background md:col-span-2"
                   placeholder="Mensagem que o visitante vai enviar"

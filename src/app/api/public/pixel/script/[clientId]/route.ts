@@ -27,6 +27,30 @@ export async function GET(
     return params.get(name) || null;
   }
 
+  function getCookie(name) {
+    var match = document.cookie.match(new RegExp("(?:^|; )" + name + "=([^;]*)"));
+    return match ? decodeURIComponent(match[1]) : null;
+  }
+
+  // Fallback for when the click id isn't in the CURRENT page's URL (e.g. the visitor clicked
+  // through from an earlier page that had it) — Meta's own Pixel and Google's Conversion
+  // Linker/gtag, if also installed on the site, keep it alive in a first-party cookie across
+  // the whole domain. _fbc is "fb.<subdomainIndex>.<timestamp>.<fbclid>"; _gcl_aw is
+  // "GCL.<timestamp>.<gclid>". Both are absent if those platforms' own scripts aren't present.
+  function fbclidFromCookie() {
+    var fbc = getCookie("_fbc");
+    if (!fbc) return null;
+    var parts = fbc.split(".");
+    return parts.length >= 4 ? parts.slice(3).join(".") : null;
+  }
+
+  function gclidFromCookie() {
+    var gclAw = getCookie("_gcl_aw");
+    if (!gclAw) return null;
+    var parts = gclAw.split(".");
+    return parts.length >= 3 ? parts[2] : null;
+  }
+
   function ensureSession() {
     var existing = null;
     try { existing = window.localStorage.getItem(STORAGE_KEY); } catch (e) {}
@@ -42,10 +66,11 @@ export async function GET(
         utmCampaign: getParam("utm_campaign"),
         utmContent: getParam("utm_content"),
         utmTerm: getParam("utm_term"),
-        fbclid: getParam("fbclid"),
-        gclid: getParam("gclid"),
+        fbclid: getParam("fbclid") || fbclidFromCookie(),
+        gclid: getParam("gclid") || gclidFromCookie(),
         gbraid: getParam("gbraid"),
         wbraid: getParam("wbraid"),
+        fbp: getCookie("_fbp"),
         landingUrl: window.location.href,
       }),
     })
