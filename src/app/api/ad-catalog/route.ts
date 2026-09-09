@@ -13,6 +13,9 @@ export async function GET() {
   const ads = await prisma.mappedAd.findMany({
     where: { clientId: session.user.clientId },
     orderBy: [{ campaignName: 'asc' }, { adsetName: 'asc' }, { adName: 'asc' }],
+    include: {
+      adMessageLink: { select: { finalMessage: true, waNumber: true, codingStrategy: true } },
+    },
   });
 
   return NextResponse.json({ ads });

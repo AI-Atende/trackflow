@@ -5,7 +5,10 @@ import { extractInvisibleCode, extractVisibleCode } from '@/lib/tracking-codes';
 
 const TIME_WINDOW_MINUTES = 30;
 
-type MatchStrategy = 'CODE_INVISIBLE' | 'CODE_VISIBLE' | 'TIME_WINDOW' | 'UNMATCHED';
+type MatchStrategy = 'CODE_INVISIBLE' | 'CODE_VISIBLE' | 'TIME_WINDOW' | 'AD_CODE' | 'UNMATCHED';
+
+type PixelSessionRow = Awaited<ReturnType<typeof prisma.pixelSession.findFirst>>;
+type MappedAdRow = Awaited<ReturnType<typeof prisma.mappedAd.findFirst>>;
 
 // POST /api/internal/messages/received — relayed by the portal (app/api/webhooks/messaging/
 // [clientId] there) after it verifies the inbound WhatsApp message's signature. Auth: shared
@@ -34,7 +37,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ success: true, skipped: 'unknown client' });
   }
 
-  const { matchStrategy, matchedSession } = await matchSession(client.id, text);
+  const { matchStrategy, matchedSession, matchedMappedAd } = await matchIncomingMessage(
+    client.id,
+    text,
+  );
 
   const trackedMessage = await prisma.trackedMessage.create({
     data: {
@@ -45,18 +51,26 @@ export async function POST(req: NextRequest) {
       matchStrategy,
       matchedPixelSessionId: matchedSession?.id ?? null,
       matchedTrackingLinkId: matchedSession?.lastTrackingLinkId ?? null,
-      kommoSyncStatus: matchedSession ? 'PENDING' : 'SKIPPED',
+      matchedMappedAdId: matchedMappedAd?.id ?? null,
+      kommoSyncStatus: matchedSession || matchedMappedAd ? 'PENDING' : 'SKIPPED',
     },
   });
 
-  if (matchedSession) {
-    await prisma.pixelSession.update({
-      where: { id: matchedSession.id },
-      data: { matchedAt: new Date() },
-    });
+  if (matchedSession || matchedMappedAd) {
+    if (matchedSession) {
+      await prisma.pixelSession.update({
+        where: { id: matchedSession.id },
+        data: { matchedAt: new Date() },
+      });
+    }
 
     try {
-      await syncToKommo(client.id, waId, matchedSession, trackedMessage.id);
+      await syncToKommo(
+        client.id,
+        waId,
+        { session: matchedSession, mappedAd: matchedMappedAd },
+        trackedMessage.id,
+      );
     } catch (err) {
       await prisma.trackedMessage.update({
         where: { id: trackedMessage.id },
@@ -71,26 +85,43 @@ export async function POST(req: NextRequest) {
   return NextResponse.json({ success: true, matchStrategy, trackedMessageId: trackedMessage.id });
 }
 
-async function matchSession(
+// Tries, in order: a static per-ad code (AdMessageLink — Fase 2, Click-to-WhatsApp, no site visit
+// at all) before a per-visitor PixelSession code (Fase 1, both invisible then visible), then falls
+// back to the time-window heuristic (PixelSession only — there's no "recent click" signal to
+// correlate a CTWA message against without a code, so AD_CODE has no fallback of its own).
+async function matchIncomingMessage(
   clientId: string,
   text: string,
 ): Promise<{
   matchStrategy: MatchStrategy;
-  matchedSession: Awaited<ReturnType<typeof prisma.pixelSession.findFirst>> | null;
+  matchedSession: PixelSessionRow | null;
+  matchedMappedAd: MappedAdRow | null;
 }> {
   const invisibleCode = extractInvisibleCode(text);
   if (invisibleCode) {
+    const adLink = await prisma.adMessageLink.findUnique({ where: { code: invisibleCode } });
+    if (adLink && adLink.clientId === clientId) {
+      const mappedAd = await prisma.mappedAd.findUnique({ where: { id: adLink.mappedAdId } });
+      return { matchStrategy: 'AD_CODE', matchedSession: null, matchedMappedAd: mappedAd };
+    }
+
     const session = await prisma.pixelSession.findUnique({ where: { sessionCode: invisibleCode } });
     if (session && session.clientId === clientId) {
-      return { matchStrategy: 'CODE_INVISIBLE', matchedSession: session };
+      return { matchStrategy: 'CODE_INVISIBLE', matchedSession: session, matchedMappedAd: null };
     }
   }
 
   const visibleCode = extractVisibleCode(text);
   if (visibleCode) {
+    const adLink = await prisma.adMessageLink.findUnique({ where: { code: visibleCode } });
+    if (adLink && adLink.clientId === clientId) {
+      const mappedAd = await prisma.mappedAd.findUnique({ where: { id: adLink.mappedAdId } });
+      return { matchStrategy: 'AD_CODE', matchedSession: null, matchedMappedAd: mappedAd };
+    }
+
     const session = await prisma.pixelSession.findUnique({ where: { sessionCode: visibleCode } });
     if (session && session.clientId === clientId) {
-      return { matchStrategy: 'CODE_VISIBLE', matchedSession: session };
+      return { matchStrategy: 'CODE_VISIBLE', matchedSession: session, matchedMappedAd: null };
     }
   }
 
@@ -100,10 +131,10 @@ async function matchSession(
     orderBy: { createdAt: 'desc' },
   });
   if (fallback) {
-    return { matchStrategy: 'TIME_WINDOW', matchedSession: fallback };
+    return { matchStrategy: 'TIME_WINDOW', matchedSession: fallback, matchedMappedAd: null };
   }
 
-  return { matchStrategy: 'UNMATCHED', matchedSession: null };
+  return { matchStrategy: 'UNMATCHED', matchedSession: null, matchedMappedAd: null };
 }
 
 interface ResolvedAdMatch {
@@ -183,14 +214,30 @@ async function resolveAdMatch(
 async function syncToKommo(
   clientId: string,
   waId: string,
-  session: NonNullable<Awaited<ReturnType<typeof prisma.pixelSession.findFirst>>>,
+  matched: { session: PixelSessionRow | null; mappedAd: MappedAdRow | null },
   trackedMessageId: string,
 ): Promise<void> {
   const [client, integrationConfig, fieldMapping, adMatch] = await Promise.all([
     prisma.client.findUnique({ where: { id: clientId } }),
     prisma.integrationConfig.findFirst({ where: { clientId, provider: 'KOMMO' } }),
     prisma.kommoFieldMapping.findUnique({ where: { clientId } }),
-    resolveAdMatch(clientId, session),
+    // AD_CODE match already IS the ad, at full confidence — no UTM guessing needed. A
+    // PixelSession match still goes through resolveAdMatch's UTM-based lookup, same as before.
+    matched.mappedAd
+      ? Promise.resolve<ResolvedAdMatch>({
+          confidence: 'id',
+          adExternalId: matched.mappedAd.adExternalId,
+          campaignExternalId: matched.mappedAd.campaignExternalId,
+          adsetExternalId: matched.mappedAd.adsetExternalId,
+        })
+      : matched.session
+        ? resolveAdMatch(clientId, matched.session)
+        : Promise.resolve<ResolvedAdMatch>({
+            confidence: null,
+            adExternalId: null,
+            campaignExternalId: null,
+            adsetExternalId: null,
+          }),
   ]);
 
   const subdomain = (integrationConfig?.config as { subdomain?: string } | null)?.subdomain;
@@ -226,13 +273,19 @@ async function syncToKommo(
     fieldId && value ? { field_id: fieldId, values: [{ value }] } : null;
 
   const customFieldsValues = [
-    fieldValue(fieldMapping.utmSourceFieldId, session.utmSource),
-    fieldValue(fieldMapping.utmMediumFieldId, session.utmMedium),
-    fieldValue(fieldMapping.utmCampaignFieldId, session.utmCampaign),
-    fieldValue(fieldMapping.utmContentFieldId, session.utmContent),
-    fieldValue(fieldMapping.utmTermFieldId, session.utmTerm),
-    fieldValue(fieldMapping.fbclidFieldId, session.fbclid),
-    fieldValue(fieldMapping.gclidFieldId, session.gclid),
+    // UTM/click-id fields only exist for a site-visit (PixelSession) match — a CTWA AD_CODE
+    // match has no UTMs at all, just the ad identity itself.
+    ...(matched.session
+      ? [
+          fieldValue(fieldMapping.utmSourceFieldId, matched.session.utmSource),
+          fieldValue(fieldMapping.utmMediumFieldId, matched.session.utmMedium),
+          fieldValue(fieldMapping.utmCampaignFieldId, matched.session.utmCampaign),
+          fieldValue(fieldMapping.utmContentFieldId, matched.session.utmContent),
+          fieldValue(fieldMapping.utmTermFieldId, matched.session.utmTerm),
+          fieldValue(fieldMapping.fbclidFieldId, matched.session.fbclid),
+          fieldValue(fieldMapping.gclidFieldId, matched.session.gclid),
+        ]
+      : []),
     // Resolved-by-catalog IDs — written alongside (not instead of) the raw UTM text above, so
     // the client can see both what was captured and what it resolved to.
     fieldValue(fieldMapping.campaignIdFieldId, adMatch.campaignExternalId),
@@ -241,15 +294,14 @@ async function syncToKommo(
   ].filter((v): v is NonNullable<typeof v> => v !== null);
 
   if (customFieldsValues.length === 0) {
-    // Lead found, but the matched session had no UTM/click-id to write — nothing was actually
-    // sent to Kommo. Marking this SYNCED (as before) was misleading: it looked like a
-    // successful write when no API call ever happened.
+    // Lead found, but nothing was actually resolved to write — no API call happened. Marking
+    // this SYNCED (as before) was misleading: it looked like a successful write when it wasn't.
     await prisma.trackedMessage.update({
       where: { id: trackedMessageId },
       data: {
         kommoLeadId: String(lead.id),
         kommoSyncStatus: 'SKIPPED',
-        kommoSyncError: 'Lead encontrado, mas a sessão não tinha UTM/click-id pra gravar',
+        kommoSyncError: 'Lead encontrado, mas nada foi resolvido pra gravar',
         resolvedAdMatchConfidence: adMatch.confidence,
       },
     });

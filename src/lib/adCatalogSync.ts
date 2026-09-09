@@ -118,6 +118,7 @@ export async function syncMetaAdCatalog(clientId: string): Promise<{ synced: num
         adExternalId: ad.id,
         adName: ad.name,
         adStatus: ad.effective_status ?? ad.status,
+        adAccountId: activeAccount.adAccountId,
         campaignExternalId: campaign.id,
         campaignName: campaign.name,
         adsetExternalId: adset.id,
@@ -126,6 +127,7 @@ export async function syncMetaAdCatalog(clientId: string): Promise<{ synced: num
       update: {
         adName: ad.name,
         adStatus: ad.effective_status ?? ad.status,
+        adAccountId: activeAccount.adAccountId,
         campaignExternalId: campaign.id,
         campaignName: campaign.name,
         adsetExternalId: adset.id,

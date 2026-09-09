@@ -63,6 +63,7 @@ model Client {
   trackedMessages TrackedMessage[]
   kommoFieldMapping KommoFieldMapping?
   mappedAds       MappedAd[]
+  adMessageLinks  AdMessageLink[]
 
   createdAt      DateTime            @default(now())
   updatedAt      DateTime            @updatedAt
@@ -300,6 +301,7 @@ enum MatchStrategy {
   CODE_INVISIBLE
   CODE_VISIBLE
   TIME_WINDOW
+  AD_CODE // matched a static AdMessageLink.code — Fase 2, no PixelSession involved at all
   UNMATCHED
 }
 
@@ -326,6 +328,10 @@ model TrackedMessage {
   matchedPixelSessionId String?
   matchedTrackingLinkId String?
   matchedTrackingLink   TrackingLink? @relation(fields: [matchedTrackingLinkId], references: [id])
+  // Set when matchStrategy is AD_CODE (Fase 2) — the ad this message matched directly, no
+  // PixelSession involved. Mutually exclusive with matchedPixelSessionId in practice.
+  matchedMappedAdId    String?
+  matchedMappedAd      MappedAd? @relation(fields: [matchedMappedAdId], references: [id])
 
   kommoLeadId     String?
   kommoSyncStatus KommoSyncStatus @default(PENDING)
@@ -391,6 +397,12 @@ model MappedAd {
   adName       String
   adStatus     String // raw status string from the platform
 
+  // Meta ad account this ad belongs to (bare digits, no `act_` — matches MetaAdAccount.adAccountId).
+  // Null for Google rows. Denormalized here (not looked up from the client's "active" account at
+  // link-build time) so a Meta Ads Manager deep link stays correct even if the client later
+  // reconnects a different ad account — this ad's own row still points at the right one.
+  adAccountId String?
+
   campaignExternalId String
   campaignName       String
 
@@ -405,7 +417,37 @@ model MappedAd {
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
+  // Fase 2: static Click-to-WhatsApp tracked message for this ad (Meta only).
+  adMessageLink   AdMessageLink?
+  trackedMessages TrackedMessage[]
+
   @@unique([clientId, platform, adExternalId])
   @@index([clientId, platform])
   @@index([clientId, platform, campaignExternalId])
+}
+
+// Fase 2 ("anúncio → WhatsApp direto"): a static Click-to-WhatsApp tracked message, one per ad.
+// Unlike PixelSession (a fresh code per site visitor), a CTWA ad's pre-filled message is
+// configured once in Meta Ads Manager and is identical for everyone who clicks it — so the code
+// has to be static per ad, not generated per click. See docs/future-considerations.md for why
+// this stays a manual copy/paste step instead of writing the ad's message via the Marketing API.
+model AdMessageLink {
+  id       String @id @default(cuid())
+  clientId String
+  client   Client @relation(fields: [clientId], references: [id])
+
+  mappedAdId String   @unique
+  mappedAd   MappedAd @relation(fields: [mappedAdId], references: [id])
+
+  code            String         @unique // static code for this ad, forever (until regenerated)
+  waNumber        String
+  messageTemplate String
+  codingStrategy  CodingStrategy // only INVISIBLE | VISIBLE_CODE apply — no TIME_WINDOW fallback
+                                 // exists for a CTWA click (there's no "recent site visit" signal)
+  finalMessage    String         // messageTemplate + embedded code, ready to paste into Meta Ads Manager
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([clientId])
 }

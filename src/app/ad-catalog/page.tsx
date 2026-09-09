@@ -14,6 +14,7 @@ import {
   X,
   Layers,
   Megaphone,
+  ExternalLink,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { Sidebar } from '@/components/Sidebar';
@@ -21,19 +22,39 @@ import { Button } from '@/components/ui/Button';
 import { Select } from '@/components/ui/Select';
 import { useToast } from '@/contexts/ToastContext';
 
+interface AdMessageLink {
+  finalMessage: string;
+  waNumber: string;
+  codingStrategy: 'INVISIBLE' | 'VISIBLE_CODE';
+}
+
 interface MappedAd {
   id: string;
   platform: 'META' | 'GOOGLE';
   adExternalId: string;
   adName: string;
   adStatus: string;
+  adAccountId: string | null;
   campaignExternalId: string;
   campaignName: string;
   adsetExternalId: string;
   adsetName: string;
   lastSyncedAt: string;
   removedAt: string | null;
+  adMessageLink: AdMessageLink | null;
 }
+
+interface WhatsAppNumber {
+  phoneNumberId: string;
+  displayNumber: string;
+}
+
+const OTHER_NUMBER = '__other__';
+
+const MESSAGE_LINK_STRATEGY_OPTIONS = [
+  { value: 'INVISIBLE', label: 'Caracteres invisíveis (padrão)' },
+  { value: 'VISIBLE_CODE', label: 'Código curto visível' },
+];
 
 type StatusFilter = 'all' | 'active' | 'paused' | 'other';
 
@@ -83,6 +104,156 @@ function CopyableId({ label, value }: { label: string; value: string }) {
       {value}
       <Copy size={12} className="opacity-0 group-hover:opacity-100 transition-opacity" />
     </button>
+  );
+}
+
+// Fase 2 — generates (or regenerates) the static Click-to-WhatsApp tracked message for one Meta
+// ad. The code is fixed per ad (not per click, unlike the site-pixel tracking links), because the
+// pre-filled message is configured once in Meta Ads Manager and is identical for every click.
+function AdMessageLinkPanel({
+  ad,
+  onUpdated,
+}: {
+  ad: MappedAd;
+  onUpdated: (updated: MappedAd) => void;
+}) {
+  const { showToast } = useToast();
+  const [registeredNumbers, setRegisteredNumbers] = useState<WhatsAppNumber[]>([]);
+  const [numberChoice, setNumberChoice] = useState(OTHER_NUMBER);
+  const [waNumber, setWaNumber] = useState('');
+  const [messageTemplate, setMessageTemplate] = useState('Olá! Quero saber mais.');
+  const [codingStrategy, setCodingStrategy] = useState<'INVISIBLE' | 'VISIBLE_CODE'>('INVISIBLE');
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [isEditing, setIsEditing] = useState(!ad.adMessageLink);
+
+  useEffect(() => {
+    fetch('/api/whatsapp-numbers').then(async (res) => {
+      if (res.ok) {
+        const data = await res.json();
+        setRegisteredNumbers(data.numbers ?? []);
+      }
+    });
+  }, []);
+
+  const handleNumberChoice = (choice: string) => {
+    setNumberChoice(choice);
+    if (choice === OTHER_NUMBER) {
+      setWaNumber('');
+      return;
+    }
+    const selected = registeredNumbers.find((n) => n.phoneNumberId === choice);
+    setWaNumber(selected ? selected.displayNumber.replace(/\D/g, '') : '');
+  };
+
+  const generate = async () => {
+    if (!waNumber.trim() || !messageTemplate.trim()) {
+      showToast('Preencha o número e a mensagem.', 'error');
+      return;
+    }
+    setIsGenerating(true);
+    try {
+      const res = await fetch(`/api/ad-catalog/${ad.id}/message-link`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ waNumber, messageTemplate, codingStrategy }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Falha ao gerar mensagem rastreada');
+      showToast('Mensagem rastreada gerada!', 'success');
+      onUpdated({
+        ...ad,
+        adMessageLink: {
+          finalMessage: data.finalMessage,
+          waNumber: data.waNumber,
+          codingStrategy: data.codingStrategy,
+        },
+      });
+      setIsEditing(false);
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Erro ao gerar mensagem rastreada', 'error');
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  const existing = ad.adMessageLink;
+
+  if (existing && !isEditing) {
+    return (
+      <div className="space-y-2">
+        <div className="bg-secondary/30 border border-border rounded-lg p-3 text-sm whitespace-pre-wrap break-words">
+          {existing.finalMessage}
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <CopyableId label="Mensagem rastreada" value={existing.finalMessage} />
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Copie a mensagem acima e cole no campo de mensagem pré-preenchida do Click-to-WhatsApp do
+          anúncio, no Gerenciador de Anúncios da Meta.
+        </p>
+        <button
+          onClick={() => setIsEditing(true)}
+          className="text-xs text-muted-foreground hover:text-foreground underline"
+        >
+          Regenerar código
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-2">
+      {existing && (
+        <p className="text-xs text-amber-600 dark:text-amber-400">
+          Atenção: regenerar cria um código novo — o anúncio só volta a ser rastreado depois que
+          você atualizar a mensagem pré-preenchida dele com o texto novo.
+        </p>
+      )}
+      <Select
+        options={[
+          ...registeredNumbers.map((n) => ({
+            value: n.phoneNumberId,
+            label: n.displayNumber,
+          })),
+          { value: OTHER_NUMBER, label: 'Outro número...' },
+        ]}
+        value={numberChoice}
+        onChange={handleNumberChoice}
+      />
+      {numberChoice === OTHER_NUMBER && (
+        <input
+          value={waNumber}
+          onChange={(e) => setWaNumber(e.target.value)}
+          placeholder="Número WhatsApp (só dígitos, com DDI)"
+          className="w-full px-3 py-2 text-sm bg-card border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500/40"
+        />
+      )}
+      <textarea
+        value={messageTemplate}
+        onChange={(e) => setMessageTemplate(e.target.value)}
+        rows={2}
+        placeholder="Mensagem pré-preenchida"
+        className="w-full px-3 py-2 text-sm bg-card border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500/40 resize-none"
+      />
+      <Select
+        options={MESSAGE_LINK_STRATEGY_OPTIONS}
+        value={codingStrategy}
+        onChange={(val) => setCodingStrategy(val as 'INVISIBLE' | 'VISIBLE_CODE')}
+      />
+      <div className="flex items-center gap-2">
+        <Button onClick={generate} disabled={isGenerating}>
+          {existing ? 'Regenerar mensagem rastreada' : 'Gerar mensagem rastreada'}
+        </Button>
+        {existing && (
+          <button
+            onClick={() => setIsEditing(false)}
+            className="text-xs text-muted-foreground hover:text-foreground underline"
+          >
+            Cancelar
+          </button>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -195,6 +366,11 @@ export default function AdCatalogPage() {
       else next.add(campaignId);
       return next;
     });
+  };
+
+  const updateAdInState = (updated: MappedAd) => {
+    setAds((prev) => prev.map((a) => (a.id === updated.id ? updated : a)));
+    setSelectedAd(updated);
   };
 
   return (
@@ -453,6 +629,28 @@ export default function AdCatalogPage() {
                   </div>
                 )}
               </div>
+
+              {selectedAd.platform === 'META' && (
+                <div className="space-y-3 pt-3 border-t border-border">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                      Click-to-WhatsApp
+                    </p>
+                    {selectedAd.adAccountId && (
+                      <a
+                        href={`https://adsmanager.facebook.com/adsmanager/manage/ads?act=${selectedAd.adAccountId}&selected_ad_ids=${selectedAd.adExternalId}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 text-xs text-brand-600 hover:text-brand-700 bg-brand-500/10 hover:bg-brand-500/20 px-2 py-1 rounded-md transition-colors shrink-0"
+                      >
+                        <ExternalLink size={12} />
+                        Abrir no Gerenciador de Anúncios
+                      </a>
+                    )}
+                  </div>
+                  <AdMessageLinkPanel ad={selectedAd} onUpdated={updateAdInState} />
+                </div>
+              )}
             </div>
           </div>
         </div>
