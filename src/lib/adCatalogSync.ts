@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/prisma';
 import { fetchAllMetaItems } from '@/services/metaService';
+import { googleAdsClient } from '@/lib/google-ads';
 
 interface MetaApiCampaign {
   id: string;
@@ -139,4 +140,178 @@ export async function syncAllMetaAdCatalogs(): Promise<void> {
       console.error(`[adCatalogSync] client ${clientId} failed`, err);
     }
   }
+}
+
+interface GoogleApiCampaignRow {
+  campaign: { id: string | number; name: string; status?: string };
+}
+interface GoogleApiAdGroupRow {
+  ad_group: { id: string | number; name: string; status?: string };
+  campaign: { id: string | number };
+}
+interface GoogleApiAdRow {
+  ad_group_ad: { ad: { id: string | number; name?: string }; status?: string };
+  ad_group: { id: string | number };
+}
+
+/**
+ * Google equivalent of syncMetaAdCatalog — same shape, same MappedAd table (platform: 'GOOGLE'),
+ * same catalog-only semantics (no metrics, no date filter — see fetchGoogleHierarchy in
+ * googleService.ts for the metrics-sync version these queries are stripped down from).
+ */
+export async function syncGoogleAdCatalog(clientId: string): Promise<{ synced: number } | null> {
+  const accounts = await prisma.googleAdAccount.findMany({ where: { clientId } });
+  const activeAccount = accounts.find((a) => a.status === 'ACTIVE') ?? accounts[0];
+  if (!activeAccount) return null;
+
+  // customerId is stored as bare digits in practice (confirmed at every write site), despite the
+  // schema comment suggesting a dashed format — strip defensively, same as fetchGoogleHierarchy.
+  const customer = googleAdsClient.Customer({
+    customer_id: activeAccount.customerId.replace(/-/g, ''),
+    refresh_token: activeAccount.refreshToken,
+  });
+
+  let campaigns: GoogleApiCampaignRow[];
+  let adGroups: GoogleApiAdGroupRow[];
+  let ads: GoogleApiAdRow[];
+  try {
+    // The library's row types mark every field optional/nullable (it can't know ahead of time
+    // which fields a given GAQL SELECT populates) — same `as unknown as` cast fetchGoogleHierarchy
+    // already uses, since we know from the SELECT clauses above exactly what's present.
+    const [campaignRows, adGroupRows, adRows] = await Promise.all([
+      customer.query('SELECT campaign.id, campaign.name, campaign.status FROM campaign'),
+      customer.query(
+        'SELECT ad_group.id, ad_group.name, ad_group.status, campaign.id FROM ad_group',
+      ),
+      customer.query(
+        'SELECT ad_group_ad.ad.id, ad_group_ad.ad.name, ad_group_ad.status, ad_group.id FROM ad_group_ad',
+      ),
+    ]);
+    campaigns = campaignRows as unknown as GoogleApiCampaignRow[];
+    adGroups = adGroupRows as unknown as GoogleApiAdGroupRow[];
+    ads = adRows as unknown as GoogleApiAdRow[];
+  } catch (err) {
+    console.error(`[adCatalogSync] Google query failed for client ${clientId}`, err);
+    throw err instanceof Error ? err : new Error(String(err));
+  }
+
+  const campaignById = new Map(campaigns.map((c) => [String(c.campaign.id), c.campaign]));
+  const adGroupById = new Map(adGroups.map((ag) => [String(ag.ad_group.id), ag]));
+
+  let orphaned = 0;
+  let synced = 0;
+  for (const row of ads) {
+    const ad = row.ad_group_ad.ad;
+    const adGroupRow = adGroupById.get(String(row.ad_group.id));
+    const campaign = adGroupRow ? campaignById.get(String(adGroupRow.campaign.id)) : undefined;
+    if (!adGroupRow || !campaign) {
+      orphaned++;
+      continue;
+    }
+
+    const adExternalId = String(ad.id);
+    const adName = ad.name || `Ad ${adExternalId}`;
+    const adStatus = String(row.ad_group_ad.status ?? 'UNKNOWN');
+    const campaignExternalId = String(campaign.id);
+    const campaignName = campaign.name;
+    const adsetExternalId = String(adGroupRow.ad_group.id);
+    const adsetName = adGroupRow.ad_group.name;
+
+    await prisma.mappedAd.upsert({
+      where: {
+        clientId_platform_adExternalId: { clientId, platform: 'GOOGLE', adExternalId },
+      },
+      create: {
+        clientId,
+        platform: 'GOOGLE',
+        adExternalId,
+        adName,
+        adStatus,
+        campaignExternalId,
+        campaignName,
+        adsetExternalId,
+        adsetName,
+      },
+      update: {
+        adName,
+        adStatus,
+        campaignExternalId,
+        campaignName,
+        adsetExternalId,
+        adsetName,
+        lastSyncedAt: new Date(),
+      },
+    });
+    synced++;
+  }
+
+  console.log(
+    `[adCatalogSync] client ${clientId}: fetched ${campaigns.length} campaign(s), ${adGroups.length} adset(s), ${ads.length} ad(s) [Google] — synced ${synced}, orphaned ${orphaned}`,
+  );
+
+  return { synced };
+}
+
+/** Runs the Google catalog sync for every client with a connected Google Ads account — used by the cron. */
+export async function syncAllGoogleAdCatalogs(): Promise<void> {
+  const clients = await prisma.googleAdAccount.findMany({
+    select: { clientId: true },
+    distinct: ['clientId'],
+  });
+
+  for (const { clientId } of clients) {
+    try {
+      const result = await syncGoogleAdCatalog(clientId);
+      console.log(
+        `[adCatalogSync] client ${clientId}: synced ${result?.synced ?? 0} ad(s) [Google]`,
+      );
+    } catch (err) {
+      console.error(`[adCatalogSync] client ${clientId} failed [Google]`, err);
+    }
+  }
+}
+
+/**
+ * Single entry point for "sync this client's whole ad catalog" — used by both the manual
+ * "Sincronizar agora" button and (per-client, inside the loops above) the cron. Runs Meta and
+ * Google independently so one platform failing doesn't hide the other succeeding.
+ */
+export async function syncAdCatalogForClient(clientId: string): Promise<{
+  synced: number;
+  connected: boolean;
+  errors?: { meta?: string; google?: string };
+}> {
+  const errors: { meta?: string; google?: string } = {};
+  let synced = 0;
+  let connected = false;
+
+  try {
+    const metaResult = await syncMetaAdCatalog(clientId);
+    if (metaResult) {
+      connected = true;
+      synced += metaResult.synced;
+    }
+  } catch (err) {
+    connected = true; // an account exists, it just failed to sync — not "not connected"
+    errors.meta = err instanceof Error ? err.message : String(err);
+  }
+
+  try {
+    const googleResult = await syncGoogleAdCatalog(clientId);
+    if (googleResult) {
+      connected = true;
+      synced += googleResult.synced;
+    }
+  } catch (err) {
+    connected = true;
+    errors.google = err instanceof Error ? err.message : String(err);
+  }
+
+  return Object.keys(errors).length > 0 ? { synced, connected, errors } : { synced, connected };
+}
+
+/** Runs both platforms' catalog syncs for every connected client — what the cron actually calls. */
+export async function syncAllAdCatalogs(): Promise<void> {
+  await syncAllMetaAdCatalogs();
+  await syncAllGoogleAdCatalogs();
 }

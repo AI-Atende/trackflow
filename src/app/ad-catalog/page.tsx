@@ -37,9 +37,21 @@ interface MappedAd {
 type StatusFilter = 'all' | 'active' | 'paused' | 'other';
 
 function statusFilterOf(status: string): Exclude<StatusFilter, 'all'> {
-  if (status === 'ACTIVE') return 'active';
+  // 'ACTIVE' is Meta's vocabulary, 'ENABLED' is Google's — same meaning, different platform.
+  // adStatus itself stays whatever the platform returned (raw); this only affects the UI bucket.
+  if (status === 'ACTIVE' || status === 'ENABLED') return 'active';
   if (status.includes('PAUSED')) return 'paused';
   return 'other';
+}
+
+function platformLabel(platform: 'META' | 'GOOGLE'): string {
+  return platform === 'META' ? 'Meta' : 'Google';
+}
+
+function platformBadgeClasses(platform: 'META' | 'GOOGLE'): string {
+  return platform === 'META'
+    ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20'
+    : 'bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20';
 }
 
 function statusBadgeClasses(status: string): string {
@@ -113,6 +125,8 @@ export default function AdCatalogPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Falha ao sincronizar');
       showToast(`Sincronizado! ${data.synced} anúncio(s) atualizados.`, 'success');
+      if (data.errors?.meta) showToast(`Meta: ${data.errors.meta}`, 'error');
+      if (data.errors?.google) showToast(`Google: ${data.errors.google}`, 'error');
       await fetchAds();
     } catch (err) {
       showToast(err instanceof Error ? err.message : 'Erro ao sincronizar catálogo', 'error');
@@ -145,14 +159,30 @@ export default function AdCatalogPage() {
     });
   }, [ads, search, statusFilter]);
 
-  // Group by campaign > adset for display
+  // Group by campaign > adset for display. Keyed by platform+campaignExternalId — the two
+  // platforms' id namespaces are independent, so a bare campaignExternalId isn't guaranteed
+  // unique across them.
   const campaigns = useMemo(() => {
     return filteredAds.reduce<
-      Record<string, { name: string; adsets: Record<string, { name: string; ads: MappedAd[] }> }>
+      Record<
+        string,
+        {
+          name: string;
+          externalId: string;
+          platform: MappedAd['platform'];
+          adsets: Record<string, { name: string; ads: MappedAd[] }>;
+        }
+      >
     >((acc, ad) => {
-      acc[ad.campaignExternalId] ??= { name: ad.campaignName, adsets: {} };
-      acc[ad.campaignExternalId].adsets[ad.adsetExternalId] ??= { name: ad.adsetName, ads: [] };
-      acc[ad.campaignExternalId].adsets[ad.adsetExternalId].ads.push(ad);
+      const key = `${ad.platform}:${ad.campaignExternalId}`;
+      acc[key] ??= {
+        name: ad.campaignName,
+        externalId: ad.campaignExternalId,
+        platform: ad.platform,
+        adsets: {},
+      };
+      acc[key].adsets[ad.adsetExternalId] ??= { name: ad.adsetName, ads: [] };
+      acc[key].adsets[ad.adsetExternalId].ads.push(ad);
       return acc;
     }, {});
   }, [filteredAds]);
@@ -207,8 +237,9 @@ export default function AdCatalogPage() {
           <div className="max-w-5xl mx-auto space-y-6">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
               <p className="text-sm text-muted-foreground max-w-2xl">
-                Todas as campanhas, conjuntos e anúncios da conta Meta conectada — a base usada pra
-                cruzar com os leads rastreados. Sincroniza a conta inteira, sem filtro de período.
+                Todas as campanhas, conjuntos e anúncios da(s) conta(s) Meta e/ou Google Ads
+                conectada(s) — a base usada pra cruzar com os leads rastreados. Sincroniza a conta
+                inteira, sem filtro de período.
               </p>
               {lastSyncedAt && (
                 <p className="text-xs text-muted-foreground whitespace-nowrap">
@@ -258,8 +289,8 @@ export default function AdCatalogPage() {
               </p>
             ) : (
               <div className="space-y-3">
-                {Object.entries(campaigns).map(([campaignId, campaign]) => {
-                  const isOpen = expandedCampaigns.has(campaignId);
+                {Object.entries(campaigns).map(([campaignKey, campaign]) => {
+                  const isOpen = expandedCampaigns.has(campaignKey);
                   const allAdsInCampaign = Object.values(campaign.adsets).flatMap((a) => a.ads);
                   const activeCount = allAdsInCampaign.filter(
                     (ad) => statusFilterOf(ad.adStatus) === 'active',
@@ -267,11 +298,11 @@ export default function AdCatalogPage() {
 
                   return (
                     <div
-                      key={campaignId}
+                      key={campaignKey}
                       className="bg-card border border-border rounded-xl overflow-hidden"
                     >
                       <button
-                        onClick={() => toggleCampaign(campaignId)}
+                        onClick={() => toggleCampaign(campaignKey)}
                         className="w-full flex items-center justify-between gap-3 p-4 hover:bg-secondary/30 transition-colors text-left"
                       >
                         <div className="flex items-center gap-3 min-w-0">
@@ -282,13 +313,18 @@ export default function AdCatalogPage() {
                           )}
                           <Megaphone size={16} className="text-brand-500 shrink-0" />
                           <span className="font-bold truncate">{campaign.name}</span>
+                          <span
+                            className={`text-[10px] shrink-0 border px-1.5 py-0.5 rounded-full font-semibold uppercase tracking-wide ${platformBadgeClasses(campaign.platform)}`}
+                          >
+                            {platformLabel(campaign.platform)}
+                          </span>
                         </div>
                         <div className="flex items-center gap-3 shrink-0">
                           <span className="text-xs text-muted-foreground hidden sm:inline">
                             {activeCount}/{allAdsInCampaign.length} ativo(s)
                           </span>
                           <span className="text-xs font-mono text-muted-foreground bg-secondary/50 px-2 py-1 rounded-md">
-                            {campaignId}
+                            {campaign.externalId}
                           </span>
                         </div>
                       </button>
@@ -378,7 +414,11 @@ export default function AdCatalogPage() {
               <div className="grid grid-cols-2 gap-4 pt-2 border-t border-border">
                 <div>
                   <p className="text-xs text-muted-foreground">Plataforma</p>
-                  <p className="font-medium">{selectedAd.platform}</p>
+                  <span
+                    className={`inline-block text-xs border px-2 py-0.5 rounded-full font-medium ${platformBadgeClasses(selectedAd.platform)}`}
+                  >
+                    {platformLabel(selectedAd.platform)}
+                  </span>
                 </div>
                 <div>
                   <p className="text-xs text-muted-foreground">Última sincronização</p>
