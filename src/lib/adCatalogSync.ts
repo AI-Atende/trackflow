@@ -35,10 +35,19 @@ export async function syncMetaAdCatalog(clientId: string): Promise<{ synced: num
   const activeAccount = accounts.find((a) => a.status === 'ACTIVE') ?? accounts[0];
   if (!activeAccount) return null;
 
+  // MetaAdAccount.adAccountId is stored bare (the `account_id` field from /me/adaccounts, no
+  // `act_` prefix — see api/integrations/meta/accounts/route.ts). The campaigns/adsets/ads edges
+  // only exist on the `act_<id>` node; hitting the bare numeric id 404s with a misleading
+  // "Tried accessing nonexisting field" error. Same normalization syncInsightsDaily.ts already
+  // does before its own Graph API calls.
+  const apiAdAccountId = activeAccount.adAccountId.startsWith('act_')
+    ? activeAccount.adAccountId
+    : `act_${activeAccount.adAccountId}`;
+
   const fields = 'id,name,status,effective_status';
   const [campaigns, adsets, ads] = await Promise.all([
     fetchAllMetaItems<MetaApiCampaign>(
-      `/${activeAccount.adAccountId}/campaigns`,
+      `/${apiAdAccountId}/campaigns`,
       activeAccount.accessToken,
       {
         fields,
@@ -47,7 +56,7 @@ export async function syncMetaAdCatalog(clientId: string): Promise<{ synced: num
       { throwOnError: true },
     ),
     fetchAllMetaItems<MetaApiAdSet>(
-      `/${activeAccount.adAccountId}/adsets`,
+      `/${apiAdAccountId}/adsets`,
       activeAccount.accessToken,
       {
         fields: `${fields},campaign_id`,
@@ -56,7 +65,7 @@ export async function syncMetaAdCatalog(clientId: string): Promise<{ synced: num
       { throwOnError: true },
     ),
     fetchAllMetaItems<MetaApiAd>(
-      `/${activeAccount.adAccountId}/ads`,
+      `/${apiAdAccountId}/ads`,
       activeAccount.accessToken,
       {
         fields: `${fields},adset_id`,
