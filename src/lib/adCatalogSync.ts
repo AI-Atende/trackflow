@@ -44,6 +44,7 @@ export async function syncMetaAdCatalog(clientId: string): Promise<{ synced: num
         fields,
         limit: 500,
       },
+      { throwOnError: true },
     ),
     fetchAllMetaItems<MetaApiAdSet>(
       `/${activeAccount.adAccountId}/adsets`,
@@ -52,21 +53,32 @@ export async function syncMetaAdCatalog(clientId: string): Promise<{ synced: num
         fields: `${fields},campaign_id`,
         limit: 500,
       },
+      { throwOnError: true },
     ),
-    fetchAllMetaItems<MetaApiAd>(`/${activeAccount.adAccountId}/ads`, activeAccount.accessToken, {
-      fields: `${fields},adset_id`,
-      limit: 500,
-    }),
+    fetchAllMetaItems<MetaApiAd>(
+      `/${activeAccount.adAccountId}/ads`,
+      activeAccount.accessToken,
+      {
+        fields: `${fields},adset_id`,
+        limit: 500,
+      },
+      { throwOnError: true },
+    ),
   ]);
 
   const campaignById = new Map(campaigns.map((c) => [c.id, c]));
   const adsetById = new Map(adsets.map((a) => [a.id, a]));
 
+  let orphaned = 0;
   let synced = 0;
   for (const ad of ads) {
     const adset = adsetById.get(ad.adset_id);
     const campaign = adset ? campaignById.get(adset.campaign_id) : undefined;
-    if (!adset || !campaign) continue; // orphaned ad (rare) — skip rather than write a half-row
+    if (!adset || !campaign) {
+      // orphaned ad (rare) — skip rather than write a half-row
+      orphaned++;
+      continue;
+    }
 
     await prisma.mappedAd.upsert({
       where: {
@@ -95,6 +107,10 @@ export async function syncMetaAdCatalog(clientId: string): Promise<{ synced: num
     });
     synced++;
   }
+
+  console.log(
+    `[adCatalogSync] client ${clientId}: fetched ${campaigns.length} campaign(s), ${adsets.length} adset(s), ${ads.length} ad(s) — synced ${synced}, orphaned ${orphaned}`,
+  );
 
   return { synced };
 }

@@ -129,6 +129,10 @@ export async function fetchAllMetaItems<T>(
   path: string,
   accessToken: string,
   params: Record<string, string | number | boolean | undefined> = {},
+  // fetchMetaHierarchy wants the old lenient behavior (log + fall back to whatever's in the DB,
+  // never blow up the dashboard). adCatalogSync wants the opposite — a failed Graph API call
+  // must not look identical to "this account genuinely has zero ads", so it passes true here.
+  { throwOnError = false }: { throwOnError?: boolean } = {},
 ): Promise<T[]> {
   let allItems: T[] = [];
   const currentPath = path;
@@ -170,6 +174,7 @@ export async function fetchAllMetaItems<T>(
       }
     } catch (e) {
       console.error('Error fetching meta items page:', e);
+      if (throwOnError) throw e;
       hasNext = false;
     }
   }
