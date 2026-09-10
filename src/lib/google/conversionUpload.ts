@@ -13,18 +13,24 @@ interface GoogleConversionActionRow {
   conversion_action: { id: string | number; name: string; resource_name: string };
 }
 
-/** Lists the client's existing Google Ads Conversion Actions (created by them in Google Ads UI)
- * — same "fetch live options from the platform" pattern already used for Kommo custom fields. */
+async function resolveActiveAccount(clientId: string) {
+  const accounts = await prisma.googleAdAccount.findMany({ where: { clientId } });
+  return accounts.find((a) => a.status === 'ACTIVE') ?? accounts[0] ?? null;
+}
+
+/** Lists the client's existing Google Ads Conversion Actions (created by them in Google Ads UI,
+ * or via createGoogleConversionAction below) — same "fetch live options from the platform"
+ * pattern already used for Kommo custom fields. */
 export async function listGoogleConversionActions(
   clientId: string,
 ): Promise<GoogleConversionActionOption[]> {
-  const accounts = await prisma.googleAdAccount.findMany({ where: { clientId } });
-  const account = accounts.find((a) => a.status === 'ACTIVE') ?? accounts[0];
+  const account = await resolveActiveAccount(clientId);
   if (!account) return [];
 
   const customer = googleAdsClient.Customer({
     customer_id: account.customerId.replace(/-/g, ''),
     refresh_token: account.refreshToken,
+    login_customer_id: account.managerId ?? undefined,
   });
 
   const rows = await customer.query(
@@ -36,6 +42,52 @@ export async function listGoogleConversionActions(
     name: r.conversion_action.name,
     resourceName: r.conversion_action.resource_name,
   }));
+}
+
+// IMPORTED_LEAD fits our case exactly (a CRM lead reaching a stage, uploaded as an offline
+// conversion) — there's no plain "LEAD" category in Google's enum, confirmed against this
+// installed library's ConversionActionCategory typings.
+export type GoogleConversionActionCategory = 'IMPORTED_LEAD' | 'PURCHASE';
+
+/**
+ * Creates a new Google Ads Conversion Action via the API — lets a journey stage be mapped to a
+ * brand-new conversion action without the client having to go create one in Google Ads UI first.
+ * category/type/status/counting_type values are all confirmed against this installed library's
+ * enum typings (unlike UploadClickConversionsRequest's user_identifiers/consent fields below,
+ * which aren't granularly typed here and still need verifying against a real account).
+ */
+export async function createGoogleConversionAction(
+  clientId: string,
+  name: string,
+  category: GoogleConversionActionCategory,
+): Promise<GoogleConversionActionOption> {
+  const account = await resolveActiveAccount(clientId);
+  if (!account) throw new Error('Nenhuma conta Google Ads conectada');
+
+  const customer = googleAdsClient.Customer({
+    customer_id: account.customerId.replace(/-/g, ''),
+    refresh_token: account.refreshToken,
+    login_customer_id: account.managerId ?? undefined,
+  });
+
+  const result = await customer.conversionActions.create([
+    {
+      name,
+      category,
+      type: 'UPLOAD_CLICKS',
+      status: 'ENABLED',
+      counting_type: 'ONE_PER_CLICK',
+    },
+  ]);
+
+  const resourceName = result.results?.[0]?.resource_name;
+  if (!resourceName) throw new Error('Google Ads não retornou a ação de conversão criada');
+
+  return {
+    id: resourceName.split('/').pop() ?? resourceName,
+    name,
+    resourceName,
+  };
 }
 
 function formatConversionDateTime(date: Date): string {
@@ -60,7 +112,7 @@ interface UploadGoogleConversionInput {
     saleValue: number | null;
   };
   // The full resource name (customers/{id}/conversionActions/{id}) — JourneyStage.googleConversionActionId
-  // stores exactly this, as returned by listGoogleConversionActions above.
+  // stores exactly this, as returned by listGoogleConversionActions/createGoogleConversionAction above.
   conversionActionId: string;
 }
 
@@ -78,11 +130,10 @@ export async function uploadGoogleConversion({
   lead,
   conversionActionId,
 }: UploadGoogleConversionInput): Promise<void> {
-  const [accounts, fieldMapping] = await Promise.all([
-    prisma.googleAdAccount.findMany({ where: { clientId } }),
+  const [account, fieldMapping] = await Promise.all([
+    resolveActiveAccount(clientId),
     prisma.kommoFieldMapping.findUnique({ where: { clientId } }),
   ]);
-  const account = accounts.find((a) => a.status === 'ACTIVE') ?? accounts[0];
   if (!account) {
     throw new Error('Nenhuma conta Google Ads conectada');
   }
@@ -96,6 +147,7 @@ export async function uploadGoogleConversion({
   const customer = googleAdsClient.Customer({
     customer_id: customerId,
     refresh_token: account.refreshToken,
+    login_customer_id: account.managerId ?? undefined,
   });
 
   const userIdentifiers: Record<string, string>[] = [];
@@ -111,6 +163,9 @@ export async function uploadGoogleConversion({
     });
   }
 
+  // Consent Mode signals — required by Google for EEA-region accounts, harmless elsewhere.
+  const consentState = account.googleAdsConsentGranted ? 'GRANTED' : 'DENIED';
+
   const request = new services.UploadClickConversionsRequest({
     customer_id: customerId,
     conversions: [
@@ -120,11 +175,14 @@ export async function uploadGoogleConversion({
         wbraid: lead.wbraid ?? undefined,
         conversion_action: conversionActionId,
         conversion_date_time: formatConversionDateTime(new Date()),
+        consent: { ad_user_data: consentState, ad_personalization: consentState },
         ...(userIdentifiers.length > 0 ? { user_identifiers: userIdentifiers } : {}),
         ...(lead.saleValue != null
           ? {
               conversion_value: lead.saleValue,
-              currency_code: fieldMapping?.defaultCurrency ?? 'BRL',
+              // The account's real billing currency (detected during ad-catalog sync) is more
+              // reliable than the free-text default — Google rejects/mismatches otherwise.
+              currency_code: account.currencyCode ?? fieldMapping?.defaultCurrency ?? 'BRL',
             }
           : {}),
       },

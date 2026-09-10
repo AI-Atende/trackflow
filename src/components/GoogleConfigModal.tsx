@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import Image from 'next/image';
+import { format } from 'date-fns';
 import { X, Check, Loader2, BarChart3 } from 'lucide-react';
 import { useToast } from '@/contexts/ToastContext';
 import { Select } from '@/components/ui/Select';
@@ -26,6 +27,13 @@ export function GoogleConfigModal({ isOpen, onClose, onSuccess }: Props) {
   const [connectedAccountName, setConnectedAccountName] = useState<string | null>(null);
   const [availableAccounts, setAvailableAccounts] = useState<GoogleAdAccountOption[]>([]);
   const [selectedAccountId, setSelectedAccountId] = useState<string>('');
+
+  // Account-level settings — MCC id, consent, currency (detected), last catalog sync.
+  const [managerId, setManagerId] = useState('');
+  const [consentGranted, setConsentGranted] = useState(true);
+  const [currencyCode, setCurrencyCode] = useState<string | null>(null);
+  const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
+  const [isSavingSettings, setIsSavingSettings] = useState(false);
 
   const fetchAccounts = useCallback(async () => {
     setLoading(true);
@@ -56,6 +64,10 @@ export function GoogleConfigModal({ isOpen, onClose, onSuccess }: Props) {
         const data = await res.json();
         setIsConnected(data.isConnected);
         setConnectedAccountName(data.accountName);
+        setManagerId(data.managerId || '');
+        setConsentGranted(data.consentGranted ?? true);
+        setCurrencyCode(data.currencyCode ?? null);
+        setLastSyncedAt(data.lastSyncedAt ?? null);
         if (data.isConnected && !data.customerId) {
           await fetchAccounts();
         }
@@ -129,6 +141,23 @@ export function GoogleConfigModal({ isOpen, onClose, onSuccess }: Props) {
     }
   };
 
+  const saveSettings = async () => {
+    setIsSavingSettings(true);
+    try {
+      const res = await fetch('/api/integrations/google/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ managerId: managerId.trim() || null, consentGranted }),
+      });
+      if (!res.ok) throw new Error('Falha ao salvar');
+      showToast('Configurações do Google Ads salvas!', 'success');
+    } catch {
+      showToast('Erro ao salvar configurações do Google Ads.', 'error');
+    } finally {
+      setIsSavingSettings(false);
+    }
+  };
+
   const handleDisconnect = async () => {
     if (!confirm('Tem certeza que deseja desconectar?')) return;
 
@@ -191,20 +220,73 @@ export function GoogleConfigModal({ isOpen, onClose, onSuccess }: Props) {
                   </div>
 
                   {connectedAccountName ? (
-                    <div className="bg-green-500/10 p-4 rounded-xl border border-green-500/20 flex justify-between items-center">
-                      <div>
-                        <p className="text-sm text-green-700 font-medium">Conta Ativa</p>
-                        <p className="text-lg font-bold">{connectedAccountName}</p>
+                    <div className="space-y-4">
+                      <div className="bg-green-500/10 p-4 rounded-xl border border-green-500/20 flex justify-between items-center">
+                        <div>
+                          <p className="text-sm text-green-700 font-medium">Conta Ativa</p>
+                          <p className="text-lg font-bold">{connectedAccountName}</p>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            {currencyCode ? `Moeda: ${currencyCode} · ` : ''}
+                            {lastSyncedAt
+                              ? `Última sincronização: ${format(new Date(lastSyncedAt), 'dd/MM/yyyy HH:mm')}`
+                              : 'Catálogo ainda não sincronizado'}
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => {
+                            setConnectedAccountName(null);
+                            fetchAccounts();
+                          }}
+                          className="text-sm text-muted-foreground hover:text-foreground underline shrink-0"
+                        >
+                          Trocar
+                        </button>
                       </div>
-                      <button
-                        onClick={() => {
-                          setConnectedAccountName(null);
-                          fetchAccounts();
-                        }}
-                        className="text-sm text-muted-foreground hover:text-foreground underline"
-                      >
-                        Trocar
-                      </button>
+
+                      <div className="space-y-3 p-4 rounded-xl border border-border text-left">
+                        <div className="space-y-1">
+                          <label className="text-xs font-medium text-muted-foreground">
+                            ID da conta gerenciadora (MCC) — opcional
+                          </label>
+                          <input
+                            value={managerId}
+                            onChange={(e) => setManagerId(e.target.value)}
+                            placeholder="Ex: 123-456-7890"
+                            className="w-full px-3 py-2 text-sm bg-card border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500/40"
+                          />
+                          <p className="text-xs text-muted-foreground">
+                            Só necessário se essa conta for gerenciada por uma MCC (agência).
+                          </p>
+                        </div>
+
+                        <div className="flex items-center justify-between pt-2">
+                          <div>
+                            <p className="text-sm font-medium text-foreground">
+                              Consentimento de anúncios personalizados
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              Desligue só se essa conta precisar declarar ausência de consentimento
+                              (ex. contas na União Europeia).
+                            </p>
+                          </div>
+                          <button
+                            onClick={() => setConsentGranted(!consentGranted)}
+                            className={`w-12 h-6 rounded-full transition-all relative shrink-0 ${consentGranted ? 'bg-green-500' : 'bg-secondary'}`}
+                          >
+                            <div
+                              className={`w-4 h-4 bg-white rounded-full absolute top-1 transition-transform shadow-sm ${consentGranted ? 'left-7' : 'left-1'}`}
+                            />
+                          </button>
+                        </div>
+
+                        <button
+                          onClick={saveSettings}
+                          disabled={isSavingSettings}
+                          className="w-full py-2 text-sm bg-secondary hover:bg-secondary/70 rounded-lg font-medium disabled:opacity-50"
+                        >
+                          {isSavingSettings ? 'Salvando...' : 'Salvar configurações'}
+                        </button>
+                      </div>
                     </div>
                   ) : (
                     <div className="space-y-4 w-full max-w-md mx-auto">

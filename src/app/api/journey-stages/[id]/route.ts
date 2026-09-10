@@ -18,6 +18,13 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
     return NextResponse.json({ error: 'Etapa não encontrada' }, { status: 404 });
   }
 
+  if (stage.position === 'FIRST' || stage.position === 'LAST') {
+    return NextResponse.json(
+      { error: 'As etapas inicial e final da jornada não podem ser removidas' },
+      { status: 409 },
+    );
+  }
+
   const [leadCount, eventCount] = await Promise.all([
     prisma.lead.count({ where: { currentJourneyStageId: id } }),
     prisma.conversionEventLog.count({ where: { journeyStageId: id } }),

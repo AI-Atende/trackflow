@@ -1,12 +1,13 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { ArrowLeft, Link, Facebook, Menu, BarChart3 } from 'lucide-react';
+import { ArrowLeft, Link, Facebook, Menu, BarChart3, Waypoints } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { IntegrationCard } from '@/components/IntegrationCard';
 import { KommoConfigModal } from '@/components/KommoConfigModal';
 import { MetaConfigModal } from '@/components/MetaConfigModal';
 import { GoogleConfigModal } from '@/components/GoogleConfigModal';
+import { JourneyConfigModal } from '@/components/JourneyConfigModal';
 import { Sidebar } from '@/components/Sidebar';
 import { useSession } from 'next-auth/react';
 
@@ -17,6 +18,7 @@ export default function IntegrationsPage() {
   const [kommoStatus, setKommoStatus] = useState(false);
   const [isMetaModalOpen, setIsMetaModalOpen] = useState(false);
   const [isGoogleModalOpen, setIsGoogleModalOpen] = useState(false);
+  const [isJourneyModalOpen, setIsJourneyModalOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   const fetchKommoStatus = useCallback(async () => {
@@ -108,6 +110,17 @@ export default function IntegrationsPage() {
                 isActive={true} // Logic to check status can be added here or inside modal
                 onConfigure={() => setIsGoogleModalOpen(true)}
               />
+
+              {/* Jornada do Lead — cross-platform (Meta + Google), não é uma config do Kommo. O
+                  Kommo é só a fonte de etapas usada hoje; por isso o card fica separado dos
+                  outros 3, que são conexões de plataforma. */}
+              <IntegrationCard
+                name="Jornada do Lead"
+                description="Etapas do funil que disparam eventos de conversão pra Meta e Google."
+                icon={<Waypoints size={24} className="text-brand-500" />}
+                isActive={true}
+                onConfigure={() => setIsJourneyModalOpen(true)}
+              />
             </div>
 
             {/* Modals */}
@@ -124,6 +137,11 @@ export default function IntegrationsPage() {
             <GoogleConfigModal
               isOpen={isGoogleModalOpen}
               onClose={() => setIsGoogleModalOpen(false)}
+              onSuccess={() => {}}
+            />
+            <JourneyConfigModal
+              isOpen={isJourneyModalOpen}
+              onClose={() => setIsJourneyModalOpen(false)}
               onSuccess={() => {}}
             />
           </div>

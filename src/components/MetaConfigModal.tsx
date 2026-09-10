@@ -34,6 +34,10 @@ export const MetaConfigModal: React.FC<MetaConfigModalProps> = ({ isOpen, onClos
   const [selectedAccountId, setSelectedAccountId] = useState<string>('');
   const [selectedBusinessId, setSelectedBusinessId] = useState<string>('');
   const [journeyStages, setJourneyStages] = useState<string[]>(['impressions', 'clicks', 'leads']);
+  // Collapsed by default — the fixed impressions→clicks→leads funnel covers almost every client;
+  // most people never need to touch this, so it's tucked behind "Personalizar" instead of an
+  // always-open 5-slot editor everyone sees whether they want it or not.
+  const [showAdvancedFunnel, setShowAdvancedFunnel] = useState(false);
 
   // Conversions API (lead journey conversion events) — separate credential from the OAuth token
   // used for reading campaign/ad data above; pasted by the client from Meta's Events Manager.
@@ -484,57 +488,77 @@ export const MetaConfigModal: React.FC<MetaConfigModalProps> = ({ isOpen, onClos
               {/* Jornada de Compra (Only show if connected) */}
               {isConnected && (
                 <div className="space-y-4 pt-4 border-t border-border">
-                  <div className="flex items-center gap-2">
-                    <Layers size={18} className="text-brand-500" />
-                    <label className="block text-sm font-medium text-foreground">
-                      Mapeamento da Jornada
-                    </label>
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    Selecione até 5 métricas para exibir no funil. A última etapa configurada será
-                    considerada o <strong>Resultado</strong> da campanha.
-                  </p>
-
-                  <div className="space-y-3">
-                    {journeyStages.map((stage, index) => (
-                      <div
-                        key={index}
-                        className="flex items-center gap-3 bg-secondary/30 p-3 rounded-lg border border-border"
-                      >
-                        <span className="flex items-center justify-center w-6 h-6 rounded-full bg-brand-500/10 text-brand-500 text-xs font-bold border border-brand-500/20 shrink-0">
-                          {index + 1}
-                        </span>
-
-                        <div className="flex-1">
-                          <Select
-                            options={AVAILABLE_METRICS.map((m) => ({
-                              ...m,
-                              disabled: journeyStages.includes(m.value) && m.value !== stage, // Disable if used elsewhere
-                            }))}
-                            value={stage}
-                            onChange={(val) => updateStage(index, val)}
-                          />
-                        </div>
-
-                        <button
-                          onClick={() => removeStage(index)}
-                          className="text-muted-foreground hover:text-red-500 p-2 hover:bg-red-500/10 rounded-lg transition-colors"
-                          disabled={journeyStages.length <= 1}
-                          title="Remover etapa"
-                        >
-                          <X size={16} />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-
-                  {journeyStages.length < 5 && (
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <Layers size={18} className="text-brand-500" />
+                      <label className="block text-sm font-medium text-foreground">
+                        Mapeamento da Jornada
+                      </label>
+                    </div>
                     <button
-                      onClick={addStage}
-                      className="w-full py-3 border-2 border-dashed border-border rounded-xl text-muted-foreground hover:text-brand-500 hover:border-brand-500/50 hover:bg-brand-500/5 transition-all flex items-center justify-center gap-2 text-sm font-medium"
+                      onClick={() => setShowAdvancedFunnel(!showAdvancedFunnel)}
+                      className="text-xs text-brand-600 hover:text-brand-700 underline shrink-0"
                     >
-                      + Adicionar Etapa
+                      {showAdvancedFunnel ? 'Usar padrão' : 'Personalizar'}
                     </button>
+                  </div>
+
+                  {!showAdvancedFunnel ? (
+                    <p className="text-xs text-muted-foreground">
+                      Funil padrão:{' '}
+                      {journeyStages
+                        .map((s) => AVAILABLE_METRICS.find((m) => m.value === s)?.label ?? s)
+                        .join(' → ')}
+                    </p>
+                  ) : (
+                    <>
+                      <p className="text-xs text-muted-foreground">
+                        Selecione até 5 métricas para exibir no funil. A última etapa configurada
+                        será considerada o <strong>Resultado</strong> da campanha.
+                      </p>
+
+                      <div className="space-y-3">
+                        {journeyStages.map((stage, index) => (
+                          <div
+                            key={index}
+                            className="flex items-center gap-3 bg-secondary/30 p-3 rounded-lg border border-border"
+                          >
+                            <span className="flex items-center justify-center w-6 h-6 rounded-full bg-brand-500/10 text-brand-500 text-xs font-bold border border-brand-500/20 shrink-0">
+                              {index + 1}
+                            </span>
+
+                            <div className="flex-1">
+                              <Select
+                                options={AVAILABLE_METRICS.map((m) => ({
+                                  ...m,
+                                  disabled: journeyStages.includes(m.value) && m.value !== stage, // Disable if used elsewhere
+                                }))}
+                                value={stage}
+                                onChange={(val) => updateStage(index, val)}
+                              />
+                            </div>
+
+                            <button
+                              onClick={() => removeStage(index)}
+                              className="text-muted-foreground hover:text-red-500 p-2 hover:bg-red-500/10 rounded-lg transition-colors"
+                              disabled={journeyStages.length <= 1}
+                              title="Remover etapa"
+                            >
+                              <X size={16} />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+
+                      {journeyStages.length < 5 && (
+                        <button
+                          onClick={addStage}
+                          className="w-full py-3 border-2 border-dashed border-border rounded-xl text-muted-foreground hover:text-brand-500 hover:border-brand-500/50 hover:bg-brand-500/5 transition-all flex items-center justify-center gap-2 text-sm font-medium"
+                        >
+                          + Adicionar Etapa
+                        </button>
+                      )}
+                    </>
                   )}
                 </div>
               )}

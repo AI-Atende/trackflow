@@ -74,10 +74,22 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'stages deve ser um array' }, { status: 400 });
   }
 
+  // The journey always has exactly one FIRST ("Lead criado") and one LAST ("Compra") bookend —
+  // enforced here too, not just in the UI, since this endpoint is the actual source of truth.
+  const firstCount = stages.filter((s) => s?.position === 'FIRST').length;
+  const lastCount = stages.filter((s) => s?.position === 'LAST').length;
+  if (firstCount !== 1 || lastCount !== 1) {
+    return NextResponse.json(
+      { error: 'A jornada precisa de exatamente uma etapa inicial e uma final' },
+      { status: 400 },
+    );
+  }
+
   for (const stage of stages) {
     const {
       id,
       label,
+      position,
       order,
       kommoPipelineId,
       kommoStatusId,
@@ -93,6 +105,7 @@ export async function POST(req: NextRequest) {
 
     const data = {
       label,
+      position: position === 'FIRST' || position === 'LAST' ? position : null,
       order: order ?? 0,
       kommoPipelineId: Number(kommoPipelineId),
       kommoStatusId: Number(kommoStatusId),

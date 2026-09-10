@@ -21,10 +21,23 @@ export async function GET(_request: Request) {
   const isConnected = !!client.googleUserRefreshToken;
   const activeAccount = client.googleAdAccounts.find((a) => a.status === 'ACTIVE');
 
+  const lastSyncedAt = activeAccount
+    ? (
+        await prisma.mappedAd.aggregate({
+          where: { clientId: session.user.clientId, platform: 'GOOGLE' },
+          _max: { lastSyncedAt: true },
+        })
+      )._max.lastSyncedAt
+    : null;
+
   return NextResponse.json({
     isConnected,
     accountName: activeAccount?.name || null,
     customerId: activeAccount?.customerId || null,
+    managerId: activeAccount?.managerId || null,
+    consentGranted: activeAccount?.googleAdsConsentGranted ?? true,
+    currencyCode: activeAccount?.currencyCode || null,
+    lastSyncedAt,
   });
 }
 

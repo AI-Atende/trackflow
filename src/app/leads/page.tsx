@@ -3,9 +3,19 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useSession } from 'next-auth/react';
 import { format } from 'date-fns';
-import { ArrowLeft, Menu, ChevronRight, ChevronDown, X, User, Megaphone } from 'lucide-react';
+import {
+  ArrowLeft,
+  Menu,
+  ChevronRight,
+  ChevronDown,
+  X,
+  User,
+  Megaphone,
+  Download,
+} from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { Sidebar } from '@/components/Sidebar';
+import { Button } from '@/components/ui/Button';
 import { Select } from '@/components/ui/Select';
 import { useToast } from '@/contexts/ToastContext';
 
@@ -89,6 +99,7 @@ export default function LeadsPage() {
   const [expandedStages, setExpandedStages] = useState<Set<string>>(new Set());
   const [selectedLead, setSelectedLead] = useState<LeadRow | null>(null);
   const [movingLeadId, setMovingLeadId] = useState<string | null>(null);
+  const [isImporting, setIsImporting] = useState(false);
 
   const fetchLeads = useCallback(async () => {
     setIsLoading(true);
@@ -134,6 +145,24 @@ export default function LeadsPage() {
       showToast(err instanceof Error ? err.message : 'Erro ao mover o lead', 'error');
     } finally {
       setMovingLeadId(null);
+    }
+  };
+
+  const importLeads = async () => {
+    setIsImporting(true);
+    try {
+      const res = await fetch('/api/leads/import', { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Falha ao importar leads');
+      showToast(
+        `${data.imported} lead(s) importado(s) do Kommo${data.skipped ? `, ${data.skipped} ignorado(s)` : ''}.`,
+        'success',
+      );
+      await fetchLeads();
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Erro ao importar leads do Kommo', 'error');
+    } finally {
+      setIsImporting(false);
     }
   };
 
@@ -193,6 +222,10 @@ export default function LeadsPage() {
             </button>
             <h1 className="text-xl font-bold text-foreground">Jornada dos Leads</h1>
           </div>
+          <Button onClick={importLeads} disabled={isImporting}>
+            <Download size={16} className="mr-2" />
+            {isImporting ? 'Importando...' : 'Importar leads do Kommo'}
+          </Button>
         </header>
 
         <div className="flex-1 overflow-y-auto p-6 md:p-8 space-y-6 bg-background">

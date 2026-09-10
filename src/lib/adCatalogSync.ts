@@ -199,16 +199,18 @@ export async function syncGoogleAdCatalog(clientId: string): Promise<{ synced: n
   const customer = googleAdsClient.Customer({
     customer_id: activeAccount.customerId.replace(/-/g, ''),
     refresh_token: activeAccount.refreshToken,
+    login_customer_id: activeAccount.managerId ?? undefined,
   });
 
   let campaigns: GoogleApiCampaignRow[];
   let adGroups: GoogleApiAdGroupRow[];
   let ads: GoogleApiAdRow[];
+  let currencyCode: string | null = null;
   try {
     // The library's row types mark every field optional/nullable (it can't know ahead of time
     // which fields a given GAQL SELECT populates) — same `as unknown as` cast fetchGoogleHierarchy
     // already uses, since we know from the SELECT clauses above exactly what's present.
-    const [campaignRows, adGroupRows, adRows] = await Promise.all([
+    const [campaignRows, adGroupRows, adRows, customerRows] = await Promise.all([
       customer.query('SELECT campaign.id, campaign.name, campaign.status FROM campaign'),
       customer.query(
         'SELECT ad_group.id, ad_group.name, ad_group.status, campaign.id FROM ad_group',
@@ -216,13 +218,25 @@ export async function syncGoogleAdCatalog(clientId: string): Promise<{ synced: n
       customer.query(
         'SELECT ad_group_ad.ad.id, ad_group_ad.ad.name, ad_group_ad.status, ad_group.id FROM ad_group_ad',
       ),
+      // Piggybacks on this same periodic sync so currencyCode stays fresh without a dedicated
+      // job — the account's currency essentially never changes, no need to fetch it more often.
+      customer.query('SELECT customer.currency_code FROM customer'),
     ]);
     campaigns = campaignRows as unknown as GoogleApiCampaignRow[];
     adGroups = adGroupRows as unknown as GoogleApiAdGroupRow[];
     ads = adRows as unknown as GoogleApiAdRow[];
+    const customerRow = (customerRows as unknown as { customer: { currency_code?: string } }[])[0];
+    currencyCode = customerRow?.customer?.currency_code ?? null;
   } catch (err) {
     console.error(`[adCatalogSync] Google query failed for client ${clientId}`, err);
     throw err instanceof Error ? err : new Error(String(err));
+  }
+
+  if (currencyCode && currencyCode !== activeAccount.currencyCode) {
+    await prisma.googleAdAccount.update({
+      where: { id: activeAccount.id },
+      data: { currencyCode },
+    });
   }
 
   const campaignById = new Map(campaigns.map((c) => [String(c.campaign.id), c.campaign]));

@@ -1,4 +1,5 @@
-import type { CustomField } from 'kommo-aiatende-api';
+import type { CustomField, KommoClient, Lead as KommoLead } from 'kommo-aiatende-api';
+import type { KommoFieldMapping, JourneyStage as JourneyStageRow } from '@generated/prisma/client';
 import { prisma } from '@/lib/prisma';
 import { getKommoClientForClient } from '@/lib/kommo-auth';
 import { sendMetaConversionEvent } from '@/lib/meta/capi';
@@ -27,40 +28,20 @@ interface KommoAttribution {
   saleValue: number | null;
 }
 
-const EMPTY_ATTRIBUTION: KommoAttribution = {
-  waId: null,
-  fbclid: null,
-  gclid: null,
-  gbraid: null,
-  wbraid: null,
-  matchedMappedAdId: null,
-  email: null,
-  firstName: null,
-  lastName: null,
-  saleValue: null,
-};
-
 /**
- * Reads a lead's attribution back from its own Kommo custom fields — the same fieldIds
+ * Reads attribution off an already-fetched Kommo lead (+ its main contact) — the same fieldIds
  * KommoFieldMapping already uses to WRITE fbclid/gclid/gbraid/wbraid/adId (see syncToKommo in
  * api/internal/messages/received/route.ts). Closes the loop without a new join through
- * PixelSession/TrackedMessage. Also fetches the lead's main contact to normalize its phone
- * number into the same digits-only format TrackedMessage.waId already uses.
+ * PixelSession/TrackedMessage. Pure/no API calls of its own beyond the contact fetch — callers
+ * fetch the lead itself however fits their situation: one at a time via leads.getById
+ * (processLeadStageChange) or in bulk via leads.list (importExistingLeadsFromKommo).
  */
-async function fetchLeadAttributionFromKommo(
+async function extractAttributionFromKommoLead(
+  kommo: KommoClient,
+  fieldMapping: KommoFieldMapping | null,
   clientId: string,
-  kommoLeadId: number,
+  lead: KommoLead,
 ): Promise<KommoAttribution> {
-  const [kommoConn, fieldMapping] = await Promise.all([
-    getKommoClientForClient(clientId),
-    prisma.kommoFieldMapping.findUnique({ where: { clientId } }),
-  ]);
-  if (!kommoConn) return EMPTY_ATTRIBUTION;
-  const { kommo } = kommoConn;
-
-  const lead = await kommo.leads.getById(kommoLeadId, { with: ['contacts'] });
-  if (!lead) return EMPTY_ATTRIBUTION;
-
   let waId: string | null = null;
   let email: string | null = null;
   let firstName: string | null = null;
@@ -132,59 +113,224 @@ async function fetchLeadAttributionFromKommo(
 }
 
 /**
+ * Ranks a lead's current Kommo status against every JourneyStage mapped in that SAME pipeline,
+ * using the pipeline's real status order (PipelineStatus.sort) — not an exact status_id match.
+ * Kommo pipelines are ordered: reaching a later status implies having passed every earlier one,
+ * even ones the client never explicitly mapped (e.g. an intermediate "Triagem iniciada" between
+ * two mapped stages). `reachedStages` is every mapped stage at or before the lead's position
+ * (ascending); `currentStage` is the most advanced one — null if the lead hasn't reached the
+ * first mapped stage yet. Stages mapped to a different pipeline never apply (a lead lives in one
+ * pipeline at a time).
+ */
+async function resolveReachedStages(
+  kommo: KommoClient,
+  clientId: string,
+  kommoPipelineId: number,
+  targetStatusId: number,
+  statusSortCache?: Map<number, Map<number, number>>,
+): Promise<{ currentStage: JourneyStageRow | null; reachedStages: JourneyStageRow[] }> {
+  let sortById = statusSortCache?.get(kommoPipelineId);
+  if (!sortById) {
+    const res = await kommo.pipelines.listStatuses(kommoPipelineId);
+    sortById = new Map((res._embedded?.statuses ?? []).map((s) => [s.id, s.sort]));
+    statusSortCache?.set(kommoPipelineId, sortById);
+  }
+
+  const targetSort = sortById.get(targetStatusId);
+  if (targetSort === undefined) return { currentStage: null, reachedStages: [] };
+
+  const journeyStages = await prisma.journeyStage.findMany({
+    where: { clientId, kommoPipelineId },
+  });
+  const ranked = journeyStages
+    .map((stage) => ({ stage, sort: sortById!.get(stage.kommoStatusId) }))
+    .filter((x): x is { stage: JourneyStageRow; sort: number } => x.sort !== undefined)
+    .filter((x) => x.sort <= targetSort)
+    .sort((a, b) => a.sort - b.sort);
+
+  const reachedStages = ranked.map((x) => x.stage);
+  return {
+    currentStage: reachedStages.length > 0 ? reachedStages[reachedStages.length - 1] : null,
+    reachedStages,
+  };
+}
+
+/**
  * Single entry point for "this lead just moved to this Kommo pipeline/status" — called by the
  * Kommo webhook (status_lead), the manual Leads UI, and the internal API for other systems.
- * No-ops if no JourneyStage is configured for this pipeline/status (not every Kommo stage needs
- * to fire an event). Fires the configured Meta/Google conversion event(s) exactly once per
- * (lead, stage, platform) — see ConversionEventLog's unique constraint.
+ * No-ops if the lead hasn't reached any mapped JourneyStage yet. Fires the configured Meta/Google
+ * conversion event(s) for every stage newly reached (see resolveReachedStages) — exactly once per
+ * (lead, stage, platform), guarded by ConversionEventLog's unique constraint, so this correctly
+ * handles both normal sequential progression and a lead jumping past several mapped stages at once.
  */
 export async function processLeadStageChange(input: ProcessStageChangeInput): Promise<void> {
   const { clientId, kommoLeadId, kommoPipelineId, kommoStatusId, source } = input;
 
-  const journeyStage = await prisma.journeyStage.findUnique({
-    where: {
-      clientId_kommoPipelineId_kommoStatusId: { clientId, kommoPipelineId, kommoStatusId },
-    },
-  });
-  if (!journeyStage) return;
+  const kommoConn = await getKommoClientForClient(clientId);
+  if (!kommoConn) {
+    console.warn(
+      `[leadJourney] client ${clientId}: Kommo not configured, can't resolve lead ${kommoLeadId}`,
+    );
+    return;
+  }
+  const { kommo } = kommoConn;
+
+  const { currentStage, reachedStages } = await resolveReachedStages(
+    kommo,
+    clientId,
+    kommoPipelineId,
+    kommoStatusId,
+  );
+  if (!currentStage) return;
 
   const existingLead = await prisma.lead.findUnique({
     where: { clientId_kommoLeadId: { clientId, kommoLeadId } },
   });
-  const stageChanged = !existingLead || existingLead.currentJourneyStageId !== journeyStage.id;
+  const stageChanged = !existingLead || existingLead.currentJourneyStageId !== currentStage.id;
 
-  const attribution =
-    !existingLead || !existingLead.waId
-      ? await fetchLeadAttributionFromKommo(clientId, kommoLeadId)
-      : null;
+  let attribution: KommoAttribution | null = null;
+  if (!existingLead || !existingLead.waId) {
+    const [fieldMapping, kommoLead] = await Promise.all([
+      prisma.kommoFieldMapping.findUnique({ where: { clientId } }),
+      kommo.leads.getById(kommoLeadId, { with: ['contacts'] }),
+    ]);
+    if (kommoLead) {
+      attribution = await extractAttributionFromKommoLead(kommo, fieldMapping, clientId, kommoLead);
+    }
+  }
 
   const lead = await prisma.lead.upsert({
     where: { clientId_kommoLeadId: { clientId, kommoLeadId } },
     create: {
       clientId,
       kommoLeadId,
-      currentJourneyStageId: journeyStage.id,
+      currentJourneyStageId: currentStage.id,
       ...(attribution ?? {}),
     },
     update: {
-      currentJourneyStageId: journeyStage.id,
+      currentJourneyStageId: currentStage.id,
       ...(attribution ?? {}),
     },
   });
 
   console.log(
-    `[leadJourney] client ${clientId}: lead ${kommoLeadId} -> stage "${journeyStage.label}" (source=${source}, changed=${stageChanged})`,
+    `[leadJourney] client ${clientId}: lead ${kommoLeadId} -> stage "${currentStage.label}" ` +
+      `(source=${source}, changed=${stageChanged}, reached=[${reachedStages.map((s) => s.label).join(', ')}])`,
   );
 
   if (!stageChanged) return;
 
-  await fireConversionEvents(clientId, lead, journeyStage);
+  for (const stage of reachedStages) {
+    await fireConversionEvents(clientId, lead, stage);
+  }
+}
+
+const IMPORT_PAGE_SIZE = 250;
+
+/**
+ * One-time backfill: pulls every Kommo lead in a pipeline that has at least one mapped
+ * JourneyStage, ranks each one's current status the same way processLeadStageChange does (see
+ * resolveReachedStages — position-based, not exact match, so a lead already past "Lead novo"
+ * still counts as having reached it), and mirrors it into Lead. Deliberately does NOT call
+ * fireConversionEvents. These leads may have reached their stage months ago; firing a batch of
+ * "Purchase"/"Lead" events with today's timestamp would skew Meta/Google's value-based
+ * optimization. Only stage changes from here on (webhook/manual/API) fire events — this just
+ * gets the journey's picture of "who's where" caught up to reality.
+ */
+export async function importExistingLeadsFromKommo(
+  clientId: string,
+): Promise<{ imported: number; skipped: number }> {
+  // Checked before touching Kommo at all — no journey configured means nothing to import
+  // regardless of connection state, and this is the more informative message for that case
+  // ("configure a jornada primeiro" beats a confusing "Kommo not configured" when it might be).
+  const journeyStages = await prisma.journeyStage.findMany({ where: { clientId } });
+  if (journeyStages.length === 0) return { imported: 0, skipped: 0 };
+
+  const [kommoConn, fieldMapping] = await Promise.all([
+    getKommoClientForClient(clientId),
+    prisma.kommoFieldMapping.findUnique({ where: { clientId } }),
+  ]);
+  if (!kommoConn) throw new Error('Kommo não configurado para este cliente');
+  const { kommo } = kommoConn;
+
+  const pipelineIds = [...new Set(journeyStages.map((s) => s.kommoPipelineId))];
+  const statusSortCache = new Map<number, Map<number, number>>();
+
+  let imported = 0;
+  let skipped = 0;
+
+  for (const pipelineId of pipelineIds) {
+    let page = 1;
+    for (;;) {
+      const res = await kommo.leads.list({
+        filter_pipeline_id: [pipelineId],
+        with: ['contacts'],
+        limit: IMPORT_PAGE_SIZE,
+        page,
+      });
+      const leads = res._embedded?.leads ?? [];
+      if (leads.length === 0) break;
+
+      for (const lead of leads) {
+        if (lead.status_id == null) {
+          skipped++;
+          continue;
+        }
+        try {
+          const { currentStage } = await resolveReachedStages(
+            kommo,
+            clientId,
+            pipelineId,
+            lead.status_id,
+            statusSortCache,
+          );
+          if (!currentStage) {
+            skipped++;
+            continue;
+          }
+
+          const attribution = await extractAttributionFromKommoLead(
+            kommo,
+            fieldMapping,
+            clientId,
+            lead,
+          );
+          await prisma.lead.upsert({
+            where: { clientId_kommoLeadId: { clientId, kommoLeadId: lead.id } },
+            create: {
+              clientId,
+              kommoLeadId: lead.id,
+              currentJourneyStageId: currentStage.id,
+              ...attribution,
+            },
+            update: {
+              currentJourneyStageId: currentStage.id,
+              ...attribution,
+            },
+          });
+          imported++;
+        } catch (err) {
+          console.error(`[leadJourney] import: failed lead ${lead.id} for client ${clientId}`, err);
+          skipped++;
+        }
+      }
+
+      if (leads.length < IMPORT_PAGE_SIZE) break;
+      page++;
+    }
+  }
+
+  console.log(
+    `[leadJourney] client ${clientId}: imported ${imported} existing lead(s), skipped ${skipped}`,
+  );
+
+  return { imported, skipped };
 }
 
 async function fireConversionEvents(
   clientId: string,
   lead: NonNullable<Awaited<ReturnType<typeof prisma.lead.findUnique>>>,
-  journeyStage: NonNullable<Awaited<ReturnType<typeof prisma.journeyStage.findUnique>>>,
+  journeyStage: JourneyStageRow,
 ): Promise<void> {
   const targets: { platform: 'META' | 'GOOGLE'; eventName: string }[] = [];
   if (journeyStage.metaEventName)
@@ -218,30 +364,59 @@ async function fireConversionEvents(
       },
     });
 
-    await attemptSendConversionEvent(log.id, clientId, lead, target.platform, target.eventName);
+    await attemptSendConversionEvent(
+      log.id,
+      clientId,
+      lead,
+      target.platform,
+      target.eventName,
+      journeyStage.label,
+    );
   }
+}
+
+/** Adds a tag (by name — Kommo creates it if it doesn't exist yet) to a lead without touching its
+ * existing tags, via Kommo's dedicated tags endpoint (unlike a general lead update, which would
+ * replace the tag list). Best-effort: a client working the lead in Kommo sees the accumulated
+ * conversion history as tags, even mid-conversation — but a failure here shouldn't undo an
+ * already-confirmed conversion send. */
+async function tagKommoLead(clientId: string, kommoLeadId: number, tagName: string): Promise<void> {
+  try {
+    const kommoConn = await getKommoClientForClient(clientId);
+    if (!kommoConn) return;
+    await kommoConn.kommo.tags.updateForOne('leads', kommoLeadId, {
+      _embedded: { tags: [{ name: tagName }] },
+    });
+  } catch (err) {
+    console.error(`[leadJourney] failed to tag Kommo lead ${kommoLeadId} with "${tagName}"`, err);
+  }
+}
+
+interface ConversionLead {
+  id: string;
+  kommoLeadId: number;
+  waId: string | null;
+  fbclid: string | null;
+  gclid: string | null;
+  gbraid: string | null;
+  wbraid: string | null;
+  email: string | null;
+  firstName: string | null;
+  lastName: string | null;
+  saleValue: number | null;
 }
 
 /** Sends one ConversionEventLog row, updating it to SENT/FAILED — shared by the inline attempt
  * (fireConversionEvents, right after creating the PENDING row) and conversionEventRetryJob's
- * sweep over leftover PENDING/FAILED rows. */
+ * sweep over leftover PENDING/FAILED rows. Tags the Kommo lead only after a confirmed SENT — a
+ * tagging failure never flips an already-successful send back to FAILED. */
 export async function attemptSendConversionEvent(
   logId: string,
   clientId: string,
-  lead: {
-    id: string;
-    waId: string | null;
-    fbclid: string | null;
-    gclid: string | null;
-    gbraid: string | null;
-    wbraid: string | null;
-    email: string | null;
-    firstName: string | null;
-    lastName: string | null;
-    saleValue: number | null;
-  },
+  lead: ConversionLead,
   platform: 'META' | 'GOOGLE',
   eventName: string,
+  stageLabel: string,
 ): Promise<void> {
   try {
     if (platform === 'META') {
@@ -262,7 +437,10 @@ export async function attemptSendConversionEvent(
         attempts: { increment: 1 },
       },
     });
+    return;
   }
+
+  await tagKommoLead(clientId, lead.kommoLeadId, stageLabel);
 }
 
 const MAX_RETRY_ATTEMPTS = 5;
@@ -274,10 +452,17 @@ const MAX_RETRY_ATTEMPTS = 5;
 export async function retryPendingConversionEvents(): Promise<void> {
   const logs = await prisma.conversionEventLog.findMany({
     where: { status: { in: ['PENDING', 'FAILED'] }, attempts: { lt: MAX_RETRY_ATTEMPTS } },
-    include: { lead: true },
+    include: { lead: true, journeyStage: true },
   });
 
   for (const log of logs) {
-    await attemptSendConversionEvent(log.id, log.clientId, log.lead, log.platform, log.eventName);
+    await attemptSendConversionEvent(
+      log.id,
+      log.clientId,
+      log.lead,
+      log.platform,
+      log.eventName,
+      log.journeyStage.label,
+    );
   }
 }

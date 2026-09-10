@@ -141,13 +141,20 @@ model GoogleAdAccount {
   clientId       String
   client         Client                @relation(fields: [clientId], references: [id])
   customerId     String                // Google Ads Customer ID (123-456-7890)
-  managerId      String?               // MCC ID if applicable
+  managerId      String?               // MCC ID if applicable — passed as login_customer_id to the API
   name           String?
   refreshToken   String                // Critical for offline access
   accessToken    String?               // Short-lived
   tokenExpiresAt DateTime?
   status         String                @default("ACTIVE") // ACTIVE, DISCONNECTED
   insightsDaily  GoogleAdInsightDaily[]
+
+  // Consent Mode signals sent with every offline conversion upload (ad_user_data/ad_personalization)
+  // — Google requires these for EEA-region accounts; default true since most tenants aren't EEA.
+  googleAdsConsentGranted Boolean @default(true)
+  // Detected via `SELECT customer.currency_code FROM customer` during the ad-catalog sync — more
+  // reliable than the client-entered KommoFieldMapping.defaultCurrency for what Google will accept.
+  currencyCode            String?
   createdAt      DateTime              @default(now())
   updatedAt      DateTime              @updatedAt
 
@@ -479,6 +486,12 @@ model JourneyStage {
 
   label String // display label ("Lead criado", "Agendado", ...)
   order Int    // funnel position
+
+  // 'FIRST' | 'LAST' | null (middle) — every journey always has exactly one FIRST ("Lead criado")
+  // and one LAST ("Compra"); only their Kommo pipeline/status mapping is configurable, they can't
+  // be deleted/reordered away from the bookend position. Middle stages (null) are freely added/
+  // removed/reordered between them.
+  position String?
 
   kommoPipelineId Int
   kommoStatusId   Int

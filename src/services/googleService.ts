@@ -158,6 +158,7 @@ export async function fetchGoogleHierarchy(
     const customer = client.Customer({
       customer_id: account.customerId.replace(/-/g, ''), // Remove dashes
       refresh_token: account.refreshToken,
+      login_customer_id: account.managerId ?? undefined,
     });
 
     // Format dates to YYYY-MM-DD
