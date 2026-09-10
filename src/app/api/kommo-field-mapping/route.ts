@@ -34,9 +34,12 @@ export async function POST(req: NextRequest) {
     utmTermFieldId: body.utmTermFieldId ?? null,
     fbclidFieldId: body.fbclidFieldId ?? null,
     gclidFieldId: body.gclidFieldId ?? null,
+    gbraidFieldId: body.gbraidFieldId ?? null,
+    wbraidFieldId: body.wbraidFieldId ?? null,
     campaignIdFieldId: body.campaignIdFieldId ?? null,
     adsetIdFieldId: body.adsetIdFieldId ?? null,
     adIdFieldId: body.adIdFieldId ?? null,
+    defaultCurrency: body.defaultCurrency || 'BRL',
   };
 
   const mapping = await prisma.kommoFieldMapping.upsert({

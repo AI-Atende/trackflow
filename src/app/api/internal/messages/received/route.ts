@@ -284,6 +284,8 @@ async function syncToKommo(
           fieldValue(fieldMapping.utmTermFieldId, matched.session.utmTerm),
           fieldValue(fieldMapping.fbclidFieldId, matched.session.fbclid),
           fieldValue(fieldMapping.gclidFieldId, matched.session.gclid),
+          fieldValue(fieldMapping.gbraidFieldId, matched.session.gbraid),
+          fieldValue(fieldMapping.wbraidFieldId, matched.session.wbraid),
         ]
       : []),
     // Resolved-by-catalog IDs — written alongside (not instead of) the raw UTM text above, so

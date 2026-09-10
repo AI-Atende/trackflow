@@ -64,6 +64,9 @@ model Client {
   kommoFieldMapping KommoFieldMapping?
   mappedAds       MappedAd[]
   adMessageLinks  AdMessageLink[]
+  journeyStages       JourneyStage[]
+  leads               Lead[]
+  conversionEventLogs ConversionEventLog[]
 
   createdAt      DateTime            @default(now())
   updatedAt      DateTime            @updatedAt
@@ -79,6 +82,13 @@ model MetaAdAccount {
   tokenExpiresAt DateTime?
   status         String
   insightsDaily  MetaAdInsightDaily[]
+
+  // Conversions API — separate from accessToken above (a Marketing API read token, not
+  // necessarily CAPI-scoped). No OAuth flow discovers these automatically; the client pastes
+  // them from Meta's Events Manager. Used by the lead-journey conversion-event sender.
+  pixelId         String?
+  capiAccessToken String?
+
   createdAt      DateTime            @default(now())
   updatedAt      DateTime            @updatedAt
 
@@ -366,12 +376,18 @@ model KommoFieldMapping {
   utmTermFieldId     Int?
   fbclidFieldId      Int?
   gclidFieldId       Int?
+  gbraidFieldId      Int?
+  wbraidFieldId      Int?
 
   // Resolved catalog IDs (see MappedAd) — separate fields from the raw UTM text above, so the
   // client can see both what was captured and what it resolved to.
   campaignIdFieldId Int?
   adsetIdFieldId    Int?
   adIdFieldId       Int?
+
+  // Kommo has no per-lead currency field (Lead.price is a bare number) — used as the
+  // currency_code/currency sent alongside Purchase-type conversion events (see leadJourney.ts).
+  defaultCurrency String @default("BRL")
 
   updatedAt DateTime @updatedAt
 }
@@ -420,6 +436,7 @@ model MappedAd {
   // Fase 2: static Click-to-WhatsApp tracked message for this ad (Meta only).
   adMessageLink   AdMessageLink?
   trackedMessages TrackedMessage[]
+  leads           Lead[]
 
   @@unique([clientId, platform, adExternalId])
   @@index([clientId, platform])
@@ -450,4 +467,104 @@ model AdMessageLink {
   updatedAt DateTime @updatedAt
 
   @@index([clientId])
+}
+
+// Lead journey: a client-configured funnel stage, tied to a real Kommo pipeline+status (fetched
+// live via kommo.pipelines.list()/listStatuses() — replaces the old free-text journeyMap strings
+// as the source of truth). Moving a lead into this stage fires the configured event(s).
+model JourneyStage {
+  id       String @id @default(cuid())
+  clientId String
+  client   Client @relation(fields: [clientId], references: [id])
+
+  label String // display label ("Lead criado", "Agendado", ...)
+  order Int    // funnel position
+
+  kommoPipelineId Int
+  kommoStatusId   Int
+
+  // Meta: a standard CAPI event name (Lead/Schedule/InitiateCheckout/Purchase/...) or a custom one
+  metaEventName String?
+
+  // Google: which existing Conversion Action (created by the client in Google Ads) fires here
+  googleConversionActionId String?
+
+  leads               Lead[]
+  conversionEventLogs ConversionEventLog[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([clientId, kommoPipelineId, kommoStatusId])
+  @@index([clientId])
+}
+
+// A lead TrackFlow knows about, mirrored from Kommo — created/updated by processLeadStageChange
+// (lib/leadJourney.ts) the first time a kommoLeadId is seen (or while waId is still unknown).
+// Kommo stays the system of record; this only needs to know the lead's current stage and what's
+// already been fired, plus enough attribution to build a conversion event.
+model Lead {
+  id       String @id @default(cuid())
+  clientId String
+  client   Client @relation(fields: [clientId], references: [id])
+
+  kommoLeadId Int
+  waId        String? // normalized phone, read from the lead's main Kommo contact
+
+  // Attribution — read back from the lead's own Kommo custom fields (the same fieldIds
+  // KommoFieldMapping already uses to write them), not a new join through PixelSession/TrackedMessage.
+  fbclid String?
+  gclid  String?
+  gbraid String?
+  wbraid String?
+
+  // Match-quality data for Meta CAPI / Google Enhanced Conversions for Leads — all read from
+  // built-in Kommo fields (Contact.first_name/last_name, Contact's EMAIL/WORK custom field,
+  // Lead.price), not fields the client has to map themselves.
+  email     String?
+  firstName String?
+  lastName  String?
+  saleValue Float? // Kommo Lead.price at the time this stage was reached
+
+  matchedMappedAdId String?
+  matchedMappedAd   MappedAd? @relation(fields: [matchedMappedAdId], references: [id])
+
+  currentJourneyStageId String?
+  currentJourneyStage   JourneyStage? @relation(fields: [currentJourneyStageId], references: [id])
+
+  conversionEventLogs ConversionEventLog[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([clientId, kommoLeadId])
+  @@index([clientId])
+}
+
+// One row per (lead, stage, platform) — ever. The unique constraint is the idempotency guard:
+// Kommo can redeliver the same webhook, and a lead can be reprocessed manually without re-firing
+// the same conversion event twice. PENDING rows are attempted inline; conversionEventRetryJob
+// (cron, see instrumentation.ts) sweeps up PENDING/FAILED rows left behind by a failed attempt.
+model ConversionEventLog {
+  id       String @id @default(cuid())
+  clientId String
+  client   Client @relation(fields: [clientId], references: [id])
+
+  leadId         String
+  lead           Lead         @relation(fields: [leadId], references: [id])
+  journeyStageId String
+  journeyStage   JourneyStage @relation(fields: [journeyStageId], references: [id])
+
+  platform     AdPlatform // reuses the existing META | GOOGLE enum from the ad catalog
+  eventName    String
+  status       String    @default("PENDING") // PENDING | SENT | FAILED
+  errorMessage String?
+  sentAt       DateTime?
+  attempts     Int       @default(0)
+
+  createdAt DateTime @default(now())
+
+  @@unique([leadId, journeyStageId, platform])
+  @@index([clientId])
+  @@index([status])
 }

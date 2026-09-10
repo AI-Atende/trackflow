@@ -1,4 +1,5 @@
 import { KommoClient } from 'kommo-aiatende-api';
+import { prisma } from '@/lib/prisma';
 
 const TOKENS_API_URL = 'https://tokens.aiatende.dev.br';
 
@@ -46,4 +47,25 @@ async function fetchKommoToken(subdomain: string, tenantId: string): Promise<str
 export async function getKommoClient(subdomain: string, tenantId: string): Promise<KommoClient> {
   const accessToken = await fetchKommoToken(subdomain, tenantId);
   return new KommoClient({ domain: subdomain, accessToken });
+}
+
+/**
+ * Resolves a KommoClient straight from a TrackFlow clientId — the (client + IntegrationConfig +
+ * getKommoClient) lookup repeated across syncToKommo, leadJourney.ts, and the journey-stage
+ * config routes. Returns null (not a throw) when Kommo simply isn't configured for this client
+ * yet, since that's an expected/common state, not an error condition.
+ */
+export async function getKommoClientForClient(
+  clientId: string,
+): Promise<{ kommo: KommoClient; subdomain: string } | null> {
+  const [client, integrationConfig] = await Promise.all([
+    prisma.client.findUnique({ where: { id: clientId } }),
+    prisma.integrationConfig.findFirst({ where: { clientId, provider: 'KOMMO' } }),
+  ]);
+
+  const subdomain = (integrationConfig?.config as { subdomain?: string } | null)?.subdomain;
+  if (!client?.portalClientId || !subdomain) return null;
+
+  const kommo = await getKommoClient(subdomain, client.portalClientId);
+  return { kommo, subdomain };
 }

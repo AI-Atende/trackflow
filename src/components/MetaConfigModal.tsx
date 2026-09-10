@@ -35,6 +35,12 @@ export const MetaConfigModal: React.FC<MetaConfigModalProps> = ({ isOpen, onClos
   const [selectedBusinessId, setSelectedBusinessId] = useState<string>('');
   const [journeyStages, setJourneyStages] = useState<string[]>(['impressions', 'clicks', 'leads']);
 
+  // Conversions API (lead journey conversion events) — separate credential from the OAuth token
+  // used for reading campaign/ad data above; pasted by the client from Meta's Events Manager.
+  const [pixelId, setPixelId] = useState('');
+  const [capiAccessToken, setCapiAccessToken] = useState('');
+  const [isSavingCapi, setIsSavingCapi] = useState(false);
+
   const fetchAccounts = useCallback(async () => {
     setIsLoading(true);
     try {
@@ -85,11 +91,46 @@ export const MetaConfigModal: React.FC<MetaConfigModalProps> = ({ isOpen, onClos
     }
   }, []);
 
+  const fetchCapiConfig = useCallback(async () => {
+    try {
+      const res = await fetch('/api/integrations/meta/capi-config');
+      if (res.ok) {
+        const data = await res.json();
+        setPixelId(data.pixelId ?? '');
+        setCapiAccessToken(data.capiAccessToken ?? '');
+      }
+    } catch (error) {
+      console.error('Erro ao carregar configuração da Conversions API:', error);
+    }
+  }, []);
+
+  const saveCapiConfig = async () => {
+    setIsSavingCapi(true);
+    try {
+      const res = await fetch('/api/integrations/meta/capi-config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pixelId, capiAccessToken }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Falha ao salvar');
+      showToast('Configuração da Conversions API salva!', 'success');
+    } catch (err) {
+      showToast(
+        err instanceof Error ? err.message : 'Erro ao salvar configuração da Conversions API',
+        'error',
+      );
+    } finally {
+      setIsSavingCapi(false);
+    }
+  };
+
   useEffect(() => {
     if (isOpen) {
       (async () => {
         await checkStatus();
         await fetchConfig();
+        await fetchCapiConfig();
 
         // Check for action param in URL (legacy support or direct access)
         const params = new URLSearchParams(window.location.search);
@@ -111,7 +152,7 @@ export const MetaConfigModal: React.FC<MetaConfigModalProps> = ({ isOpen, onClos
       window.addEventListener('message', handleMessage);
       return () => window.removeEventListener('message', handleMessage);
     }
-  }, [isOpen, checkStatus, fetchConfig, fetchAccounts, showToast]);
+  }, [isOpen, checkStatus, fetchConfig, fetchCapiConfig, fetchAccounts, showToast]);
 
   const handleConnect = () => {
     // Open popup
@@ -495,6 +536,41 @@ export const MetaConfigModal: React.FC<MetaConfigModalProps> = ({ isOpen, onClos
                       + Adicionar Etapa
                     </button>
                   )}
+                </div>
+              )}
+
+              {/* Conversions API — used by the lead-journey feature to fire conversion events
+                  when a lead moves stage. Separate from the OAuth token above (read-only, may not
+                  be CAPI-scoped). No way to auto-discover this — pasted from Events Manager. */}
+              {isConnected && (
+                <div className="space-y-3 pt-4 border-t border-border">
+                  <label className="block text-sm font-medium text-foreground">
+                    Conversions API (eventos de conversão)
+                  </label>
+                  <p className="text-xs text-muted-foreground">
+                    Cole o Pixel ID e o token de acesso do Gerenciador de Eventos da Meta — usados
+                    pra enviar eventos de conversão quando um lead muda de etapa na jornada.
+                  </p>
+                  <input
+                    value={pixelId}
+                    onChange={(e) => setPixelId(e.target.value)}
+                    placeholder="Pixel ID"
+                    className="w-full px-3 py-2 text-sm bg-card border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500/40"
+                  />
+                  <input
+                    value={capiAccessToken}
+                    onChange={(e) => setCapiAccessToken(e.target.value)}
+                    type="password"
+                    placeholder="Token de acesso da Conversions API"
+                    className="w-full px-3 py-2 text-sm bg-card border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500/40"
+                  />
+                  <button
+                    onClick={saveCapiConfig}
+                    disabled={isSavingCapi}
+                    className="px-4 py-2 text-sm bg-secondary hover:bg-secondary/70 rounded-lg font-medium disabled:opacity-50"
+                  >
+                    {isSavingCapi ? 'Salvando...' : 'Salvar Conversions API'}
+                  </button>
                 </div>
               )}
             </>

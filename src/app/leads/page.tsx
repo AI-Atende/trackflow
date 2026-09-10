@@ -1,0 +1,414 @@
+'use client';
+
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useSession } from 'next-auth/react';
+import { format } from 'date-fns';
+import { ArrowLeft, Menu, ChevronRight, ChevronDown, X, User, Megaphone } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { Sidebar } from '@/components/Sidebar';
+import { Select } from '@/components/ui/Select';
+import { useToast } from '@/contexts/ToastContext';
+
+interface JourneyStageOption {
+  id: string;
+  label: string;
+  order: number;
+}
+
+interface ConversionEventLogRow {
+  id: string;
+  platform: 'META' | 'GOOGLE';
+  eventName: string;
+  status: string;
+  errorMessage: string | null;
+  sentAt: string | null;
+  createdAt: string;
+  journeyStage: { label: string };
+}
+
+interface LeadRow {
+  id: string;
+  kommoLeadId: number;
+  waId: string | null;
+  fbclid: string | null;
+  gclid: string | null;
+  gbraid: string | null;
+  wbraid: string | null;
+  email: string | null;
+  firstName: string | null;
+  lastName: string | null;
+  saleValue: number | null;
+  currentJourneyStage: { id: string; label: string; order: number } | null;
+  matchedMappedAd: {
+    id: string;
+    adName: string;
+    campaignName: string;
+    platform: 'META' | 'GOOGLE';
+  } | null;
+  conversionEventLogs: ConversionEventLogRow[];
+  updatedAt: string;
+}
+
+function statusBadgeClasses(status: string): string {
+  if (status === 'SENT')
+    return 'bg-green-500/10 text-green-600 dark:text-green-400 border-green-500/20';
+  if (status === 'FAILED') return 'bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20';
+  return 'bg-secondary text-muted-foreground border-border';
+}
+
+function CopyableId({ label, value }: { label: string; value: string }) {
+  const { showToast } = useToast();
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(value);
+      showToast(`${label} copiado`, 'success');
+    } catch {
+      showToast('Não foi possível copiar', 'error');
+    }
+  };
+  return (
+    <button
+      onClick={copy}
+      className="text-xs text-muted-foreground hover:text-foreground font-mono bg-secondary/50 hover:bg-secondary px-2 py-1 rounded-md transition-colors"
+      title={`Copiar ${label}`}
+    >
+      {value}
+    </button>
+  );
+}
+
+export default function LeadsPage() {
+  const router = useRouter();
+  const { data: session } = useSession();
+  const { showToast } = useToast();
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
+  const [leads, setLeads] = useState<LeadRow[]>([]);
+  const [stages, setStages] = useState<JourneyStageOption[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [expandedStages, setExpandedStages] = useState<Set<string>>(new Set());
+  const [selectedLead, setSelectedLead] = useState<LeadRow | null>(null);
+  const [movingLeadId, setMovingLeadId] = useState<string | null>(null);
+
+  const fetchLeads = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const res = await fetch('/api/leads');
+      if (res.ok) {
+        const data = await res.json();
+        setLeads(data.leads ?? []);
+        setStages(data.stages ?? []);
+        setExpandedStages((prev) => {
+          if (prev.size > 0) return prev;
+          return new Set((data.stages ?? []).map((s: JourneyStageOption) => s.id));
+        });
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    fetchLeads();
+  }, [fetchLeads]);
+
+  const moveLeadStage = async (leadId: string, journeyStageId: string) => {
+    setMovingLeadId(leadId);
+    try {
+      const res = await fetch(`/api/leads/${leadId}/stage`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ journeyStageId }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Falha ao mover o lead');
+      showToast('Lead movido de etapa!', 'success');
+      await fetchLeads();
+      setSelectedLead((prev) => {
+        if (!prev || prev.id !== leadId) return prev;
+        const updated = leads.find((l) => l.id === leadId);
+        return updated ?? prev;
+      });
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Erro ao mover o lead', 'error');
+    } finally {
+      setMovingLeadId(null);
+    }
+  };
+
+  const groups = useMemo(() => {
+    const byStage = new Map<string, LeadRow[]>();
+    for (const lead of leads) {
+      const key = lead.currentJourneyStage?.id ?? 'none';
+      const arr = byStage.get(key) ?? [];
+      arr.push(lead);
+      byStage.set(key, arr);
+    }
+    return byStage;
+  }, [leads]);
+
+  const toggleStage = (stageId: string) => {
+    setExpandedStages((prev) => {
+      const next = new Set(prev);
+      if (next.has(stageId)) next.delete(stageId);
+      else next.add(stageId);
+      return next;
+    });
+  };
+
+  const stageOptions = stages
+    .slice()
+    .sort((a, b) => a.order - b.order)
+    .map((s) => ({ value: s.id, label: s.label }));
+
+  return (
+    <div className="flex h-screen bg-background text-foreground font-sans">
+      <Sidebar
+        isOpen={isMobileMenuOpen}
+        onClose={() => setIsMobileMenuOpen(false)}
+        currentAccount={{
+          id: session?.user?.clientId || '',
+          name: session?.user?.name || '',
+          image: session?.user?.image,
+        }}
+        availableAccounts={[]}
+        onAccountChange={() => {}}
+      />
+
+      <main className="flex-1 flex flex-col h-screen relative overflow-hidden">
+        <header className="h-16 bg-card/80 backdrop-blur-md border-b border-border flex items-center justify-between px-4 md:px-8 shadow-sm z-30">
+          <div className="flex items-center gap-4">
+            <button
+              className="md:hidden p-2 -ml-2 text-slate-500 hover:bg-slate-100 rounded-lg"
+              onClick={() => setIsMobileMenuOpen(true)}
+            >
+              <Menu size={24} />
+            </button>
+            <button
+              onClick={() => router.back()}
+              className="hidden md:block p-2 -ml-2 hover:bg-secondary rounded-lg transition-colors"
+            >
+              <ArrowLeft size={20} className="text-muted-foreground" />
+            </button>
+            <h1 className="text-xl font-bold text-foreground">Jornada dos Leads</h1>
+          </div>
+        </header>
+
+        <div className="flex-1 overflow-y-auto p-6 md:p-8 space-y-6 bg-background">
+          <div className="max-w-5xl mx-auto space-y-6">
+            <p className="text-sm text-muted-foreground max-w-2xl">
+              Leads conhecidos pelo TrackFlow, agrupados pela etapa atual no Kommo — configure as
+              etapas em Configurações → Kommo. Mudar a etapa aqui também move o lead no Kommo.
+            </p>
+
+            {isLoading ? (
+              <p className="text-sm text-muted-foreground">Carregando...</p>
+            ) : stages.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                Nenhuma etapa de jornada configurada ainda — configure em Configurações → Kommo.
+              </p>
+            ) : (
+              <div className="space-y-3">
+                {stages
+                  .slice()
+                  .sort((a, b) => a.order - b.order)
+                  .map((stage) => {
+                    const stageLeads = groups.get(stage.id) ?? [];
+                    const isOpen = expandedStages.has(stage.id);
+                    return (
+                      <div
+                        key={stage.id}
+                        className="bg-card border border-border rounded-xl overflow-hidden"
+                      >
+                        <button
+                          onClick={() => toggleStage(stage.id)}
+                          className="w-full flex items-center justify-between gap-3 p-4 hover:bg-secondary/30 transition-colors text-left"
+                        >
+                          <div className="flex items-center gap-3 min-w-0">
+                            {isOpen ? (
+                              <ChevronDown size={16} className="text-muted-foreground shrink-0" />
+                            ) : (
+                              <ChevronRight size={16} className="text-muted-foreground shrink-0" />
+                            )}
+                            <span className="font-bold truncate">{stage.label}</span>
+                          </div>
+                          <span className="text-xs text-muted-foreground bg-secondary/50 px-2 py-1 rounded-md shrink-0">
+                            {stageLeads.length} lead(s)
+                          </span>
+                        </button>
+
+                        {isOpen && (
+                          <div className="border-t border-border divide-y divide-border">
+                            {stageLeads.length === 0 ? (
+                              <p className="p-4 text-sm text-muted-foreground">
+                                Nenhum lead nessa etapa ainda.
+                              </p>
+                            ) : (
+                              stageLeads.map((lead) => (
+                                <div
+                                  key={lead.id}
+                                  className="flex items-center justify-between gap-3 p-4 hover:bg-secondary/20 transition-colors"
+                                >
+                                  <button
+                                    onClick={() => setSelectedLead(lead)}
+                                    className="flex-1 min-w-0 text-left"
+                                  >
+                                    <p className="text-sm font-medium truncate">
+                                      {[lead.firstName, lead.lastName].filter(Boolean).join(' ') ||
+                                        lead.waId ||
+                                        'Lead sem nome'}
+                                    </p>
+                                    {lead.matchedMappedAd && (
+                                      <p className="text-xs text-muted-foreground truncate flex items-center gap-1">
+                                        <Megaphone size={12} />
+                                        {lead.matchedMappedAd.adName} ·{' '}
+                                        {lead.matchedMappedAd.campaignName}
+                                      </p>
+                                    )}
+                                  </button>
+                                  <div className="w-48 shrink-0">
+                                    <Select
+                                      options={stageOptions}
+                                      value={stage.id}
+                                      disabled={movingLeadId === lead.id}
+                                      onChange={(val) => moveLeadStage(lead.id, val)}
+                                    />
+                                  </div>
+                                </div>
+                              ))
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+              </div>
+            )}
+          </div>
+        </div>
+      </main>
+
+      {selectedLead && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
+          onClick={() => setSelectedLead(null)}
+        >
+          <div
+            className="bg-card w-full max-w-lg rounded-2xl shadow-2xl border border-border overflow-hidden flex flex-col max-h-[85vh]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="p-6 border-b border-border flex items-center justify-between bg-secondary/30">
+              <div className="min-w-0 flex items-center gap-2">
+                <User size={18} className="text-brand-500 shrink-0" />
+                <div className="min-w-0">
+                  <h2 className="font-bold text-lg text-foreground truncate">
+                    {[selectedLead.firstName, selectedLead.lastName].filter(Boolean).join(' ') ||
+                      selectedLead.waId ||
+                      'Lead sem nome'}
+                  </h2>
+                  {(selectedLead.firstName || selectedLead.lastName) && selectedLead.waId && (
+                    <p className="text-xs text-muted-foreground truncate">{selectedLead.waId}</p>
+                  )}
+                </div>
+              </div>
+              <button
+                onClick={() => setSelectedLead(null)}
+                className="text-muted-foreground hover:text-foreground transition-colors shrink-0"
+              >
+                <X size={24} />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-6 space-y-4 text-sm">
+              <div className="space-y-1">
+                <p className="text-xs text-muted-foreground">Etapa atual</p>
+                <Select
+                  options={stageOptions}
+                  value={selectedLead.currentJourneyStage?.id ?? ''}
+                  disabled={movingLeadId === selectedLead.id}
+                  onChange={(val) => moveLeadStage(selectedLead.id, val)}
+                />
+              </div>
+
+              {selectedLead.matchedMappedAd && (
+                <div className="space-y-1">
+                  <p className="text-xs text-muted-foreground">Anúncio atribuído</p>
+                  <p className="font-medium">{selectedLead.matchedMappedAd.adName}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {selectedLead.matchedMappedAd.campaignName}
+                  </p>
+                </div>
+              )}
+
+              {(selectedLead.email || selectedLead.saleValue != null) && (
+                <div className="grid grid-cols-2 gap-4">
+                  {selectedLead.email && (
+                    <div className="space-y-1">
+                      <p className="text-xs text-muted-foreground">E-mail</p>
+                      <p className="font-medium truncate">{selectedLead.email}</p>
+                    </div>
+                  )}
+                  {selectedLead.saleValue != null && (
+                    <div className="space-y-1">
+                      <p className="text-xs text-muted-foreground">Valor (Kommo)</p>
+                      <p className="font-medium">{selectedLead.saleValue}</p>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <div className="space-y-1">
+                <p className="text-xs text-muted-foreground">IDs de atribuição</p>
+                <div className="flex flex-wrap gap-2">
+                  {selectedLead.fbclid && <CopyableId label="fbclid" value={selectedLead.fbclid} />}
+                  {selectedLead.gclid && <CopyableId label="gclid" value={selectedLead.gclid} />}
+                  {selectedLead.gbraid && <CopyableId label="gbraid" value={selectedLead.gbraid} />}
+                  {selectedLead.wbraid && <CopyableId label="wbraid" value={selectedLead.wbraid} />}
+                  {!selectedLead.fbclid &&
+                    !selectedLead.gclid &&
+                    !selectedLead.gbraid &&
+                    !selectedLead.wbraid && (
+                      <p className="text-xs text-muted-foreground">Nenhum id capturado.</p>
+                    )}
+                </div>
+              </div>
+
+              <div className="space-y-2 pt-2 border-t border-border">
+                <p className="text-xs text-muted-foreground">Eventos de conversão</p>
+                {selectedLead.conversionEventLogs.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">Nenhum evento disparado ainda.</p>
+                ) : (
+                  <div className="space-y-1.5">
+                    {selectedLead.conversionEventLogs.map((log) => (
+                      <div
+                        key={log.id}
+                        className="flex items-center justify-between gap-2 bg-secondary/30 border border-border rounded-lg px-3 py-2"
+                      >
+                        <div className="min-w-0">
+                          <p className="text-xs font-medium truncate">
+                            {log.eventName} · {log.journeyStage.label}
+                          </p>
+                          <p className="text-[11px] text-muted-foreground">
+                            {log.platform} ·{' '}
+                            {format(new Date(log.sentAt ?? log.createdAt), 'dd/MM/yyyy HH:mm')}
+                          </p>
+                        </div>
+                        <span
+                          className={`text-[11px] shrink-0 border px-2 py-0.5 rounded-full font-medium ${statusBadgeClasses(log.status)}`}
+                          title={log.errorMessage ?? undefined}
+                        >
+                          {log.status}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

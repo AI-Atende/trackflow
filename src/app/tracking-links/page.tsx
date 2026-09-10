@@ -45,6 +45,8 @@ const FIELD_MAPPING_KEYS = [
   { key: 'utmTermFieldId', label: 'UTM Term' },
   { key: 'fbclidFieldId', label: 'Facebook Click ID (fbclid)' },
   { key: 'gclidFieldId', label: 'Google Click ID (gclid)' },
+  { key: 'gbraidFieldId', label: 'Google Click ID (gbraid)' },
+  { key: 'wbraidFieldId', label: 'Google Click ID (wbraid)' },
   { key: 'campaignIdFieldId', label: 'ID da campanha (resolvido pelo catálogo)' },
   { key: 'adsetIdFieldId', label: 'ID do conjunto de anúncios (resolvido pelo catálogo)' },
   { key: 'adIdFieldId', label: 'ID do anúncio (resolvido pelo catálogo)' },
@@ -67,6 +69,7 @@ export default function TrackingLinksPage() {
   const [isSaving, setIsSaving] = useState(false);
 
   const [fieldMapping, setFieldMapping] = useState<Record<string, number | null>>({});
+  const [defaultCurrency, setDefaultCurrency] = useState('BRL');
   const [availableFields, setAvailableFields] = useState<KommoField[]>([]);
   const [isLoadingFields, setIsLoadingFields] = useState(false);
   // Lazy initializer instead of an effect — window is only unavailable during SSR, and this
@@ -91,6 +94,7 @@ export default function TrackingLinksPage() {
     if (res.ok) {
       const data = await res.json();
       setFieldMapping(data ?? {});
+      if (data?.defaultCurrency) setDefaultCurrency(data.defaultCurrency);
     }
   }, []);
 
@@ -141,7 +145,7 @@ export default function TrackingLinksPage() {
     const res = await fetch('/api/kommo-field-mapping', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(fieldMapping),
+      body: JSON.stringify({ ...fieldMapping, defaultCurrency }),
     });
     if (res.ok) {
       showToast('Mapeamento de campos salvo!', 'success');
@@ -377,6 +381,25 @@ export default function TrackingLinksPage() {
                       />
                     </div>
                   ))}
+                </div>
+              )}
+
+              {availableFields.length > 0 && (
+                <div className="space-y-1 max-w-xs">
+                  <label className="text-xs font-medium text-muted-foreground">
+                    Moeda padrão (eventos de conversão)
+                  </label>
+                  <input
+                    value={defaultCurrency}
+                    onChange={(e) => setDefaultCurrency(e.target.value.toUpperCase())}
+                    maxLength={3}
+                    placeholder="BRL"
+                    className="w-full px-3 py-2 text-sm bg-card border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500/40 uppercase"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Kommo não tem moeda por lead — usada como currency_code/currency ao enviar valor
+                    de venda pra Meta/Google.
+                  </p>
                 </div>
               )}
 

@@ -74,6 +74,7 @@ export const Sidebar = ({
     { href: '/campaigns', label: 'Campanhas', icon: Target },
     { href: '/tracking-links', label: 'Rastreamento de Leads', icon: TrendingUp },
     { href: '/ad-catalog', label: 'Catálogo de Anúncios', icon: Layers },
+    { href: '/leads', label: 'Jornada dos Leads', icon: Users },
     { href: '/settings', label: 'Configurações', icon: Settings },
     { href: '/help', label: 'Ajuda', icon: HelpCircle },
   ];
