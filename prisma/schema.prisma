@@ -347,6 +347,13 @@ model TrackedMessage {
   phoneNumberId String?
   channel       String? // 'whatsapp' | 'whatsapp_lite'
 
+  // Meta's own click id for a Click-to-WhatsApp ad conversation (see referral.ctwa_clid on the
+  // official Cloud API webhook) — lets sendMetaConversionEvent use the richer 'business_messaging'
+  // event type instead of the generic one. Always null until the messaging platform (core-api)
+  // starts exposing it in message.received; the portal relay and this column already exist so
+  // that flips on with no further code change once it does. See src/lib/meta/capi.ts.
+  ctwaClid String?
+
   matchStrategy        MatchStrategy @default(UNMATCHED)
   matchedPixelSessionId String?
   matchedTrackingLinkId String?

@@ -45,6 +45,33 @@ interface ParsedErrorDetail {
   raw: string;
 }
 
+interface TrackedMessageRow {
+  id: string;
+  text: string;
+  receivedAt: string;
+  matchStrategy: string;
+  phoneNumberId: string | null;
+  channel: string | null;
+  matchedTrackingLink: { label: string; waNumber: string } | null;
+  matchedMappedAd: { adName: string; campaignName: string; platform: 'META' | 'GOOGLE' } | null;
+  kommoLeadId: string | null;
+  kommoSyncStatus: string;
+  kommoSyncError: string | null;
+  resolvedAdMatchConfidence: string | null;
+}
+
+const MATCH_STRATEGY_LABELS: Record<string, string> = {
+  CODE_INVISIBLE: 'Código invisível (link rastreado)',
+  CODE_VISIBLE: 'Código visível (link rastreado)',
+  AD_CODE: 'Código de anúncio (Click-to-WhatsApp)',
+  TIME_WINDOW: 'Janela de tempo (sem código)',
+  UNMATCHED: 'Não correspondido',
+};
+
+function matchStrategyLabel(strategy: string): string {
+  return MATCH_STRATEGY_LABELS[strategy] ?? strategy;
+}
+
 // Meta CAPI errors come back as "Meta CAPI error <status>: {json}" — pulling error_user_title/
 // error_user_msg out of that JSON (already localized by Meta) reads far better than the raw
 // blob. Google/other errors have no embedded JSON, so they just fall back to the raw text.
@@ -137,6 +164,8 @@ export default function LeadsPage() {
   const [maxValue, setMaxValue] = useState('');
   const [retryingLogId, setRetryingLogId] = useState<string | null>(null);
   const [expandedLogId, setExpandedLogId] = useState<string | null>(null);
+  const [trackedMessages, setTrackedMessages] = useState<TrackedMessageRow[]>([]);
+  const [isLoadingTrackedMessages, setIsLoadingTrackedMessages] = useState(false);
 
   const fetchLeads = useCallback(async () => {
     setIsLoading(true);
@@ -160,6 +189,31 @@ export default function LeadsPage() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchLeads();
   }, [fetchLeads]);
+
+  const selectedLeadId = selectedLead?.id ?? null;
+  useEffect(() => {
+    if (!selectedLeadId) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setTrackedMessages([]);
+      return;
+    }
+    let cancelled = false;
+    setIsLoadingTrackedMessages(true);
+    fetch(`/api/leads/${selectedLeadId}/tracked-messages`)
+      .then((res) => (res.ok ? res.json() : { messages: [] }))
+      .then((data) => {
+        if (!cancelled) setTrackedMessages(data.messages ?? []);
+      })
+      .catch(() => {
+        if (!cancelled) setTrackedMessages([]);
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoadingTrackedMessages(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedLeadId]);
 
   const moveLeadStage = async (leadId: string, journeyStageId: string) => {
     setMovingLeadId(leadId);
@@ -565,6 +619,75 @@ export default function LeadsPage() {
                       <p className="text-xs text-muted-foreground">Nenhum id capturado.</p>
                     )}
                 </div>
+              </div>
+
+              <div className="space-y-2 pt-2 border-t border-border">
+                <p className="text-xs text-muted-foreground">
+                  Rastreamento (mensagens que geraram atribuição)
+                </p>
+                {isLoadingTrackedMessages ? (
+                  <p className="text-xs text-muted-foreground">Carregando...</p>
+                ) : trackedMessages.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">
+                    Nenhuma mensagem rastreada encontrada pra esse telefone.
+                  </p>
+                ) : (
+                  <div className="space-y-1.5">
+                    {trackedMessages.map((msg) => {
+                      const isMatched = msg.matchStrategy !== 'UNMATCHED';
+                      return (
+                        <div
+                          key={msg.id}
+                          className="bg-secondary/30 border border-border rounded-lg px-3 py-2 space-y-1"
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <span
+                              className={`text-[11px] border px-2 py-0.5 rounded-full font-medium ${
+                                isMatched
+                                  ? 'bg-green-500/10 text-green-600 dark:text-green-400 border-green-500/20'
+                                  : 'bg-secondary text-muted-foreground border-border'
+                              }`}
+                            >
+                              {matchStrategyLabel(msg.matchStrategy)}
+                            </span>
+                            <span className="text-[11px] text-muted-foreground shrink-0">
+                              {format(new Date(msg.receivedAt), 'dd/MM/yyyy HH:mm')}
+                            </span>
+                          </div>
+                          <p className="text-xs text-foreground/90 break-words line-clamp-2">
+                            &ldquo;{msg.text}&rdquo;
+                          </p>
+                          {msg.matchedMappedAd && (
+                            <p className="text-[11px] text-muted-foreground flex items-center gap-1">
+                              <Megaphone size={11} />
+                              {msg.matchedMappedAd.adName} · {msg.matchedMappedAd.campaignName} (
+                              {msg.matchedMappedAd.platform})
+                            </p>
+                          )}
+                          {msg.matchedTrackingLink && (
+                            <p className="text-[11px] text-muted-foreground">
+                              Link: {msg.matchedTrackingLink.label}
+                            </p>
+                          )}
+                          {msg.channel && (
+                            <p className="text-[11px] text-muted-foreground">
+                              Recebido via{' '}
+                              {msg.channel === 'whatsapp_lite'
+                                ? 'WhatsApp Lite (QR Code)'
+                                : 'WhatsApp (API oficial)'}
+                            </p>
+                          )}
+                          <p
+                            className="text-[11px] text-muted-foreground"
+                            title={msg.kommoSyncError ?? undefined}
+                          >
+                            Sincronização Kommo: {msg.kommoSyncStatus}
+                          </p>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
 
               <div className="space-y-2 pt-2 border-t border-border">

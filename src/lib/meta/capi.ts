@@ -22,57 +22,52 @@ interface SendMetaConversionEventInput {
   eventName: string;
 }
 
+// Meta discards a business_messaging event tied to a ctwa_clid older than this — using a stale
+// one would just trade "missing field" errors for "expired click id" ones.
+const CTWA_CLID_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+
+interface MessagingAttribution {
+  wabaId: string | null;
+  ctwaClid: string | null;
+}
+
 /**
- * Resolves the WABA ID behind the specific WhatsApp number that actually talked to this lead —
- * not just "any Cloud API number the client has" (a client can run Cloud API and Lite numbers
- * at once, and picking the wrong one would misattribute the event to an unrelated WABA). Prefers
- * the most recent TrackedMessage's phoneNumberId (recorded from the real inbound webhook, see
- * api/internal/messages/received); falls back to "the client's only Cloud API number" when there
- * is no message history to go on (e.g. a lead imported from existing Kommo data, never relayed
- * through the messaging webhook).
+ * Resolves the two things Meta's CTWA-specific "business_messaging" event type needs on top of
+ * the normal match keys: the WABA behind the exact number that talked to this lead, and a still-
+ * fresh ctwa_clid (Meta's own click id, only present when the lead's first message carried
+ * Click-to-WhatsApp ad referral data). Both come from the most recent TrackedMessage for this
+ * lead's phone (see api/internal/messages/received).
+ *
+ * TrackFlow doesn't capture ctwa_clid yet — the portal's webhook relay has the field wired
+ * through (see app/api/webhooks/messaging/[clientId]/route.ts on the portal), but the messaging
+ * platform itself (core-api) doesn't expose it in message.received today. Until it does, this
+ * always resolves to { wabaId: null, ctwaClid: null }, and sendMetaConversionEvent below falls
+ * back to the generic action_source — no code change needed here once that lands upstream.
  */
-async function resolveWabaIdForLead(
+async function resolveMessagingAttribution(
   clientId: string,
   waId: string,
   portalClientId: string | null,
-): Promise<string> {
-  const portalNumbers = portalClientId ? await fetchPortalWhatsAppNumbers(portalClientId) : [];
+): Promise<MessagingAttribution> {
+  const none: MessagingAttribution = { wabaId: null, ctwaClid: null };
 
   const lastMessage = await prisma.trackedMessage.findFirst({
     where: { clientId, waId, phoneNumberId: { not: null } },
     orderBy: { receivedAt: 'desc' },
-    select: { phoneNumberId: true },
+    select: { phoneNumberId: true, ctwaClid: true, receivedAt: true },
   });
+  if (!lastMessage?.phoneNumberId) return none;
 
-  if (lastMessage?.phoneNumberId) {
-    const matchedNumber = portalNumbers.find((n) => n.phoneNumberId === lastMessage.phoneNumberId);
-    if (matchedNumber?.channel === 'whatsapp_lite') {
-      throw new Error(
-        'Esse lead conversou por um número WhatsApp Lite (QR Code) — sem WABA, não é possível enviar evento pra Meta (só funciona com a API oficial do WhatsApp Business)',
-      );
-    }
-    if (matchedNumber?.wabaId) {
-      return matchedNumber.wabaId;
-    }
-    // Matched a phoneNumberId but the portal has no WABA for it (number disconnected/renamed
-    // since) — fall through to the generic heuristic below rather than failing outright.
-  }
+  const ctwaClid =
+    lastMessage.ctwaClid && Date.now() - lastMessage.receivedAt.getTime() <= CTWA_CLID_MAX_AGE_MS
+      ? lastMessage.ctwaClid
+      : null;
+  if (!ctwaClid) return none; // no usable click id — a WABA alone isn't enough for business_messaging
 
-  const wabaId = portalNumbers.find((n) => n.channel === 'whatsapp' && n.wabaId)?.wabaId;
-  if (wabaId) return wabaId;
-
-  if (portalNumbers.length > 0 && portalNumbers.every((n) => n.channel === 'whatsapp_lite')) {
-    // Lite (QR Code) connections aren't onboarded through Meta's Business Platform, so they
-    // never have a WABA — this isn't a missing-config issue, it's a hard limitation: Meta's
-    // Conversions API for business_messaging only exists to track official Cloud API
-    // conversations, so events from leads on a Lite number can't be sent to Meta at all.
-    throw new Error(
-      'Número conectado via WhatsApp Lite (QR Code) — sem WABA, não é possível enviar evento pra Meta (só funciona com a API oficial do WhatsApp Business)',
-    );
-  }
-  throw new Error(
-    'WhatsApp Business Account (WABA) não encontrado no portal — não é possível enviar evento pra Meta',
-  );
+  const portalNumbers = portalClientId ? await fetchPortalWhatsAppNumbers(portalClientId) : [];
+  const matchedNumber = portalNumbers.find((n) => n.phoneNumberId === lastMessage.phoneNumberId);
+  const wabaId = matchedNumber?.channel === 'whatsapp' ? (matchedNumber.wabaId ?? null) : null;
+  return wabaId ? { wabaId, ctwaClid } : none;
 }
 
 // Events past this point in the funnel carry a monetary value worth telling Meta about — needed
@@ -105,19 +100,29 @@ export async function sendMetaConversionEvent({
     throw new Error('Lead sem telefone conhecido — não é possível enviar evento pra Meta');
   }
 
-  // Required by Meta on top of messaging_channel — the WhatsApp Business Account ID behind the
-  // number that actually talked to this lead (not just any Cloud API number the client has).
-  const wabaId = await resolveWabaIdForLead(clientId, lead.waId, client?.portalClientId ?? null);
+  // business_messaging (Meta's CTWA-specific event type) needs a WABA + a fresh ctwa_clid on top
+  // of the usual match keys — only send that way when we actually have both for this lead; every
+  // other lead (the overwhelming majority today, since ctwa_clid isn't captured upstream yet)
+  // gets the generic CRM-style event instead, which needs neither.
+  const { wabaId, ctwaClid } = await resolveMessagingAttribution(
+    clientId,
+    lead.waId,
+    client?.portalClientId ?? null,
+  );
+  const useBusinessMessaging = Boolean(wabaId && ctwaClid);
 
   const userData: Record<string, unknown> = {
     ph: [sha256(lead.waId)],
     external_id: [sha256(lead.id)],
+  };
+  if (useBusinessMessaging) {
     // Meta's actual v19.0 validation error names this "page_id" even for the whatsapp channel,
     // while the newer docs sample shows "whatsapp_business_account_id" — sending both covers
     // either validation path without depending on which one this API version checks.
-    page_id: wabaId,
-    whatsapp_business_account_id: wabaId,
-  };
+    userData.page_id = wabaId;
+    userData.whatsapp_business_account_id = wabaId;
+    userData.ctwa_clid = ctwaClid;
+  }
   if (lead.email) userData.em = [sha256(lead.email)];
   if (lead.firstName) userData.fn = [sha256(lead.firstName)];
   if (lead.lastName) userData.ln = [sha256(lead.lastName)];
@@ -142,10 +147,13 @@ export async function sendMetaConversionEvent({
         {
           event_name: eventName,
           event_time: Math.floor(Date.now() / 1000),
-          action_source: 'business_messaging',
-          // Required by Meta whenever action_source is business_messaging — omitting it fails
-          // every event with "Missing messaging channel parameter" (error_subcode 2804063).
-          messaging_channel: 'whatsapp',
+          // 'system_generated' is Meta's documented action_source for CRM-driven events (a lead
+          // reaching a stage in Kommo, not a live interaction) — matches only via user_data, no
+          // WABA/messaging_channel/ctwa_clid needed. 'business_messaging' (Meta's CTWA-specific
+          // type) only kicks in once resolveMessagingAttribution found a real WABA + fresh
+          // ctwa_clid for this lead — see useBusinessMessaging above.
+          action_source: useBusinessMessaging ? 'business_messaging' : 'system_generated',
+          ...(useBusinessMessaging ? { messaging_channel: 'whatsapp' } : {}),
           user_data: userData,
           ...(Object.keys(customData).length > 0 ? { custom_data: customData } : {}),
         },
