@@ -22,7 +22,7 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json().catch(() => null);
-  const { portalClientId, waId, text, receivedAt } = body ?? {};
+  const { portalClientId, waId, text, receivedAt, phoneNumberId, channel } = body ?? {};
   if (!portalClientId || !waId || typeof text !== 'string') {
     return NextResponse.json(
       { error: 'portalClientId, waId e text são obrigatórios' },
@@ -48,6 +48,8 @@ export async function POST(req: NextRequest) {
       waId,
       text,
       receivedAt: receivedAt ? new Date(receivedAt) : new Date(),
+      phoneNumberId: typeof phoneNumberId === 'string' ? phoneNumberId : null,
+      channel: typeof channel === 'string' ? channel : null,
       matchStrategy,
       matchedPixelSessionId: matchedSession?.id ?? null,
       matchedTrackingLinkId: matchedSession?.lastTrackingLinkId ?? null,

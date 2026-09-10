@@ -341,6 +341,12 @@ model TrackedMessage {
   text         String
   receivedAt   DateTime
 
+  // Which business WhatsApp number/channel actually received this message — lets Meta CAPI
+  // sends resolve the right WABA per lead (a client can have both Cloud API and Lite numbers
+  // connected at once). Null for messages relayed before this field existed.
+  phoneNumberId String?
+  channel       String? // 'whatsapp' | 'whatsapp_lite'
+
   matchStrategy        MatchStrategy @default(UNMATCHED)
   matchedPixelSessionId String?
   matchedTrackingLinkId String?

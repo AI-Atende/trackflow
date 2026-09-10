@@ -8,6 +8,10 @@ const PORTAL_INTERNAL_URL = process.env.PORTAL_INTERNAL_URL || process.env.PORTA
 export interface PortalWhatsAppNumber {
   phoneNumberId: string;
   displayNumber: string;
+  // 'whatsapp' = official Cloud API (has a WABA); 'whatsapp_lite' = QR Code connection (never
+  // has a WABA — not onboarded through Meta's Business Platform at all).
+  channel: 'whatsapp' | 'whatsapp_lite';
+  wabaId: string | null;
 }
 
 /**
