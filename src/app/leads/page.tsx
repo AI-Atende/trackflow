@@ -14,6 +14,7 @@ import {
   Download,
   Search,
   RotateCw,
+  Trash2,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { Sidebar } from '@/components/Sidebar';
@@ -33,6 +34,7 @@ interface ConversionEventLogRow {
   eventName: string;
   status: string;
   errorMessage: string | null;
+  responseDetail: string | null;
   sentAt: string | null;
   createdAt: string;
   attempts: number;
@@ -43,6 +45,33 @@ interface ParsedErrorDetail {
   title: string | null;
   description: string | null;
   raw: string;
+}
+
+interface ParsedSuccessDetail {
+  fbtraceId: string | null;
+  eventsReceived: number | null;
+  raw: string;
+}
+
+// Meta's success body is {events_received, messages, fbtrace_id} — pulling fbtrace_id/
+// events_received out reads better than a JSON blob and is handy to reference in a Meta support
+// case. Google's response shape isn't confirmed the same way, so it just falls back to raw JSON.
+function parseSuccessDetail(
+  raw: string | null,
+  platform: 'META' | 'GOOGLE',
+): ParsedSuccessDetail | null {
+  if (!raw) return null;
+  if (platform !== 'META') return { fbtraceId: null, eventsReceived: null, raw };
+  try {
+    const parsed = JSON.parse(raw);
+    return {
+      fbtraceId: typeof parsed?.fbtrace_id === 'string' ? parsed.fbtrace_id : null,
+      eventsReceived: typeof parsed?.events_received === 'number' ? parsed.events_received : null,
+      raw,
+    };
+  } catch {
+    return { fbtraceId: null, eventsReceived: null, raw };
+  }
 }
 
 interface TrackedMessageRow {
@@ -107,6 +136,7 @@ interface LeadRow {
   firstName: string | null;
   lastName: string | null;
   saleValue: number | null;
+  attributionType: string | null;
   currentJourneyStage: { id: string; label: string; order: number } | null;
   matchedMappedAd: {
     id: string;
@@ -117,6 +147,38 @@ interface LeadRow {
   conversionEventLogs: ConversionEventLogRow[];
   updatedAt: string;
 }
+
+// Derived client-side from the lead's own click ids / registered-ad match (not solely from
+// attributionType) so leads synced before that field existed still show the right badge instead
+// of a misleading "Não rastreado". EXTERNAL is the one case that needs the server's classification
+// (it depends on TrackedMessage history, which isn't part of this row).
+function attributionBadge(lead: LeadRow): { label: string; className: string } {
+  const hasGoogle =
+    Boolean(lead.gclid || lead.gbraid || lead.wbraid) ||
+    lead.matchedMappedAd?.platform === 'GOOGLE';
+  const hasMeta = Boolean(lead.fbclid) || lead.matchedMappedAd?.platform === 'META';
+  if (hasGoogle) {
+    return {
+      label: 'Google',
+      className: 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20',
+    };
+  }
+  if (hasMeta) {
+    return {
+      label: 'Meta',
+      className: 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/20',
+    };
+  }
+  if (lead.attributionType === 'EXTERNAL') {
+    return {
+      label: 'Fonte externa',
+      className: 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20',
+    };
+  }
+  return { label: 'Não rastreado', className: 'bg-secondary text-muted-foreground border-border' };
+}
+
+const LEADS_PER_PAGE = 15;
 
 function statusBadgeClasses(status: string): string {
   if (status === 'SENT')
@@ -155,7 +217,7 @@ export default function LeadsPage() {
   const [leads, setLeads] = useState<LeadRow[]>([]);
   const [stages, setStages] = useState<JourneyStageOption[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [expandedStages, setExpandedStages] = useState<Set<string>>(new Set());
+  const [columnPages, setColumnPages] = useState<Record<string, number>>({});
   const [selectedLead, setSelectedLead] = useState<LeadRow | null>(null);
   const [movingLeadId, setMovingLeadId] = useState<string | null>(null);
   const [isImporting, setIsImporting] = useState(false);
@@ -166,6 +228,7 @@ export default function LeadsPage() {
   const [expandedLogId, setExpandedLogId] = useState<string | null>(null);
   const [trackedMessages, setTrackedMessages] = useState<TrackedMessageRow[]>([]);
   const [isLoadingTrackedMessages, setIsLoadingTrackedMessages] = useState(false);
+  const [isDeletingLead, setIsDeletingLead] = useState(false);
 
   const fetchLeads = useCallback(async () => {
     setIsLoading(true);
@@ -175,10 +238,6 @@ export default function LeadsPage() {
         const data = await res.json();
         setLeads(data.leads ?? []);
         setStages(data.stages ?? []);
-        setExpandedStages((prev) => {
-          if (prev.size > 0) return prev;
-          return new Set((data.stages ?? []).map((s: JourneyStageOption) => s.id));
-        });
       }
     } finally {
       setIsLoading(false);
@@ -275,6 +334,29 @@ export default function LeadsPage() {
     }
   };
 
+  const deleteLead = async (leadId: string) => {
+    if (
+      !confirm(
+        'Excluir este lead do TrackFlow? Isso apaga o lead, o histórico de eventos de conversão e as mensagens de rastreamento desse telefone aqui (o Kommo não é alterado). Útil pra testar de novo do zero, inclusive a atribuição.',
+      )
+    ) {
+      return;
+    }
+    setIsDeletingLead(true);
+    try {
+      const res = await fetch(`/api/leads/${leadId}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Falha ao excluir o lead');
+      showToast('Lead excluído.', 'success');
+      setSelectedLead(null);
+      setLeads((prev) => prev.filter((l) => l.id !== leadId));
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Erro ao excluir o lead', 'error');
+    } finally {
+      setIsDeletingLead(false);
+    }
+  };
+
   const importLeads = async () => {
     setIsImporting(true);
     try {
@@ -340,15 +422,6 @@ export default function LeadsPage() {
     }
     return byStage;
   }, [filteredLeads]);
-
-  const toggleStage = (stageId: string) => {
-    setExpandedStages((prev) => {
-      const next = new Set(prev);
-      if (next.has(stageId)) next.delete(stageId);
-      else next.add(stageId);
-      return next;
-    });
-  };
 
   const stageOptions = stages
     .slice()
@@ -454,77 +527,89 @@ export default function LeadsPage() {
                 Nenhuma etapa de jornada configurada ainda — configure em Configurações → Kommo.
               </p>
             ) : (
-              <div className="space-y-3">
+              <div className="flex gap-4 overflow-x-auto pb-2">
                 {stages
                   .slice()
                   .sort((a, b) => a.order - b.order)
                   .map((stage) => {
                     const stageLeads = groups.get(stage.id) ?? [];
-                    const isOpen = expandedStages.has(stage.id);
+                    const totalPages = Math.max(1, Math.ceil(stageLeads.length / LEADS_PER_PAGE));
+                    const page = Math.min(columnPages[stage.id] ?? 1, totalPages);
+                    const pageLeads = stageLeads.slice(
+                      (page - 1) * LEADS_PER_PAGE,
+                      page * LEADS_PER_PAGE,
+                    );
+                    const setPage = (next: number) =>
+                      setColumnPages((prev) => ({ ...prev, [stage.id]: next }));
+
                     return (
                       <div
                         key={stage.id}
-                        className="bg-card border border-border rounded-xl overflow-hidden"
+                        className="shrink-0 w-72 h-[65vh] bg-card border border-border rounded-xl flex flex-col overflow-hidden"
                       >
-                        <button
-                          onClick={() => toggleStage(stage.id)}
-                          className="w-full flex items-center justify-between gap-3 p-4 hover:bg-secondary/30 transition-colors text-left"
-                        >
-                          <div className="flex items-center gap-3 min-w-0">
-                            {isOpen ? (
-                              <ChevronDown size={16} className="text-muted-foreground shrink-0" />
-                            ) : (
-                              <ChevronRight size={16} className="text-muted-foreground shrink-0" />
-                            )}
-                            <span className="font-bold truncate">{stage.label}</span>
-                          </div>
-                          <span className="text-xs text-muted-foreground bg-secondary/50 px-2 py-1 rounded-md shrink-0">
-                            {stageLeads.length} lead(s)
+                        <div className="flex items-center justify-between gap-2 p-3 border-b border-border shrink-0">
+                          <span className="font-bold text-sm truncate">{stage.label}</span>
+                          <span className="text-xs text-muted-foreground bg-secondary/50 px-2 py-0.5 rounded-md shrink-0">
+                            {stageLeads.length}
                           </span>
-                        </button>
+                        </div>
 
-                        {isOpen && (
-                          <div className="border-t border-border divide-y divide-border">
-                            {stageLeads.length === 0 ? (
-                              <p className="p-4 text-sm text-muted-foreground">
-                                {hasActiveFilters
-                                  ? 'Nenhum lead nessa etapa corresponde aos filtros.'
-                                  : 'Nenhum lead nessa etapa ainda.'}
-                              </p>
-                            ) : (
-                              stageLeads.map((lead) => (
-                                <div
+                        <div className="flex-1 overflow-y-auto p-2 space-y-2">
+                          {pageLeads.length === 0 ? (
+                            <p className="p-2 text-xs text-muted-foreground">
+                              {hasActiveFilters
+                                ? 'Nenhum lead nessa etapa corresponde aos filtros.'
+                                : 'Nenhum lead nessa etapa ainda.'}
+                            </p>
+                          ) : (
+                            pageLeads.map((lead) => {
+                              const badge = attributionBadge(lead);
+                              return (
+                                <button
                                   key={lead.id}
-                                  className="flex items-center justify-between gap-3 p-4 hover:bg-secondary/20 transition-colors"
+                                  onClick={() => setSelectedLead(lead)}
+                                  className="w-full text-left bg-secondary/30 hover:bg-secondary/50 border border-border rounded-lg p-2.5 space-y-1 transition-colors"
                                 >
-                                  <button
-                                    onClick={() => setSelectedLead(lead)}
-                                    className="flex-1 min-w-0 text-left"
-                                  >
-                                    <p className="text-sm font-medium truncate">
-                                      {[lead.firstName, lead.lastName].filter(Boolean).join(' ') ||
-                                        lead.waId ||
-                                        'Lead sem nome'}
+                                  <p className="text-sm font-medium truncate">
+                                    {[lead.firstName, lead.lastName].filter(Boolean).join(' ') ||
+                                      lead.waId ||
+                                      'Lead sem nome'}
+                                  </p>
+                                  {lead.waId && (
+                                    <p className="text-xs text-muted-foreground font-mono truncate">
+                                      {lead.waId}
                                     </p>
-                                    {lead.matchedMappedAd && (
-                                      <p className="text-xs text-muted-foreground truncate flex items-center gap-1">
-                                        <Megaphone size={12} />
-                                        {lead.matchedMappedAd.adName} ·{' '}
-                                        {lead.matchedMappedAd.campaignName}
-                                      </p>
-                                    )}
-                                  </button>
-                                  <div className="w-48 shrink-0">
-                                    <Select
-                                      options={stageOptions}
-                                      value={stage.id}
-                                      disabled={movingLeadId === lead.id}
-                                      onChange={(val) => moveLeadStage(lead.id, val)}
-                                    />
-                                  </div>
-                                </div>
-                              ))
-                            )}
+                                  )}
+                                  <span
+                                    className={`inline-block text-[10px] border px-1.5 py-0.5 rounded-full font-medium ${badge.className}`}
+                                  >
+                                    {badge.label}
+                                  </span>
+                                </button>
+                              );
+                            })
+                          )}
+                        </div>
+
+                        {totalPages > 1 && (
+                          <div className="flex items-center justify-between gap-2 p-2 border-t border-border text-xs shrink-0">
+                            <button
+                              onClick={() => setPage(page - 1)}
+                              disabled={page <= 1}
+                              className="px-2 py-1 rounded-md hover:bg-secondary disabled:opacity-40 disabled:hover:bg-transparent text-muted-foreground hover:text-foreground transition-colors"
+                            >
+                              Anterior
+                            </button>
+                            <span className="text-muted-foreground">
+                              {page} / {totalPages}
+                            </span>
+                            <button
+                              onClick={() => setPage(page + 1)}
+                              disabled={page >= totalPages}
+                              className="px-2 py-1 rounded-md hover:bg-secondary disabled:opacity-40 disabled:hover:bg-transparent text-muted-foreground hover:text-foreground transition-colors"
+                            >
+                              Próximo
+                            </button>
                           </div>
                         )}
                       </div>
@@ -559,12 +644,22 @@ export default function LeadsPage() {
                   )}
                 </div>
               </div>
-              <button
-                onClick={() => setSelectedLead(null)}
-                className="text-muted-foreground hover:text-foreground transition-colors shrink-0"
-              >
-                <X size={24} />
-              </button>
+              <div className="flex items-center gap-1 shrink-0">
+                <button
+                  onClick={() => deleteLead(selectedLead.id)}
+                  disabled={isDeletingLead}
+                  title="Excluir lead e rastreamento (pra testar de novo)"
+                  className="text-muted-foreground hover:text-red-500 disabled:opacity-50 transition-colors p-1 rounded-md hover:bg-secondary"
+                >
+                  <Trash2 size={18} />
+                </button>
+                <button
+                  onClick={() => setSelectedLead(null)}
+                  className="text-muted-foreground hover:text-foreground transition-colors p-1"
+                >
+                  <X size={24} />
+                </button>
+              </div>
             </div>
 
             <div className="flex-1 overflow-y-auto p-6 space-y-4 text-sm">
@@ -699,6 +794,7 @@ export default function LeadsPage() {
                     {selectedLead.conversionEventLogs.map((log) => {
                       const isExpanded = expandedLogId === log.id;
                       const errorDetail = parseErrorDetail(log.errorMessage);
+                      const successDetail = parseSuccessDetail(log.responseDetail, log.platform);
                       return (
                         <div
                           key={log.id}
@@ -781,9 +877,33 @@ export default function LeadsPage() {
                               </div>
 
                               {log.status === 'SENT' && (
-                                <p className="text-[11px] text-green-600 dark:text-green-400">
-                                  Evento confirmado na plataforma — sem erros.
-                                </p>
+                                <div className="space-y-1.5">
+                                  <div className="bg-green-500/10 border border-green-500/20 rounded-md px-2.5 py-2 space-y-0.5">
+                                    <p className="text-[11px] font-semibold text-green-600 dark:text-green-400">
+                                      Evento confirmado na plataforma — sem erros.
+                                    </p>
+                                    {successDetail?.eventsReceived != null && (
+                                      <p className="text-[11px] text-green-600/90 dark:text-green-400/90">
+                                        Eventos recebidos: {successDetail.eventsReceived}
+                                      </p>
+                                    )}
+                                    {successDetail?.fbtraceId && (
+                                      <p className="text-[11px] text-green-600/90 dark:text-green-400/90">
+                                        fbtrace_id: {successDetail.fbtraceId}
+                                      </p>
+                                    )}
+                                  </div>
+                                  {successDetail?.raw && (
+                                    <details className="text-[11px]">
+                                      <summary className="cursor-pointer text-muted-foreground hover:text-foreground select-none">
+                                        Detalhes técnicos
+                                      </summary>
+                                      <pre className="mt-1 whitespace-pre-wrap break-all bg-secondary/50 border border-border rounded-md p-2 font-mono text-[10px] text-muted-foreground max-h-40 overflow-y-auto">
+                                        {successDetail.raw}
+                                      </pre>
+                                    </details>
+                                  )}
+                                </div>
                               )}
 
                               {errorDetail && (

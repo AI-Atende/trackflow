@@ -43,6 +43,7 @@ export const MetaConfigModal: React.FC<MetaConfigModalProps> = ({ isOpen, onClos
   // used for reading campaign/ad data above; pasted by the client from Meta's Events Manager.
   const [pixelId, setPixelId] = useState('');
   const [capiAccessToken, setCapiAccessToken] = useState('');
+  const [sendUnattributedConversions, setSendUnattributedConversions] = useState(false);
   const [isSavingCapi, setIsSavingCapi] = useState(false);
 
   const fetchAccounts = useCallback(async () => {
@@ -102,6 +103,7 @@ export const MetaConfigModal: React.FC<MetaConfigModalProps> = ({ isOpen, onClos
         const data = await res.json();
         setPixelId(data.pixelId ?? '');
         setCapiAccessToken(data.capiAccessToken ?? '');
+        setSendUnattributedConversions(Boolean(data.sendUnattributedConversions));
       }
     } catch (error) {
       console.error('Erro ao carregar configuração da Conversions API:', error);
@@ -114,7 +116,7 @@ export const MetaConfigModal: React.FC<MetaConfigModalProps> = ({ isOpen, onClos
       const res = await fetch('/api/integrations/meta/capi-config', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pixelId, capiAccessToken }),
+        body: JSON.stringify({ pixelId, capiAccessToken, sendUnattributedConversions }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Falha ao salvar');
@@ -588,6 +590,26 @@ export const MetaConfigModal: React.FC<MetaConfigModalProps> = ({ isOpen, onClos
                     placeholder="Token de acesso da Conversions API"
                     className="w-full px-3 py-2 text-sm bg-card border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500/40"
                   />
+                  <div className="flex items-center justify-between pt-2">
+                    <div>
+                      <p className="text-sm font-medium text-foreground">
+                        Enviar conversões mesmo sem atribuição oficial
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        Por padrão só leads rastreados até um anúncio (id de clique ou anúncio
+                        cadastrado) disparam conversão. Ligue pra incluir também leads de fonte
+                        externa (link na bio, parceiro presencial) e não rastreados.
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => setSendUnattributedConversions(!sendUnattributedConversions)}
+                      className={`w-12 h-6 rounded-full transition-all relative shrink-0 ${sendUnattributedConversions ? 'bg-green-500' : 'bg-secondary'}`}
+                    >
+                      <div
+                        className={`w-4 h-4 bg-white rounded-full absolute top-1 transition-transform shadow-sm ${sendUnattributedConversions ? 'left-7' : 'left-1'}`}
+                      />
+                    </button>
+                  </div>
                   <button
                     onClick={saveCapiConfig}
                     disabled={isSavingCapi}

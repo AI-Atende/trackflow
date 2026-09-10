@@ -19,6 +19,7 @@ export async function GET() {
   return NextResponse.json({
     pixelId: account?.pixelId ?? null,
     capiAccessToken: account?.capiAccessToken ?? null,
+    sendUnattributedConversions: account?.sendUnattributedConversions ?? false,
   });
 }
 
@@ -29,7 +30,7 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json().catch(() => null);
-  const { pixelId, capiAccessToken } = body ?? {};
+  const { pixelId, capiAccessToken, sendUnattributedConversions } = body ?? {};
 
   const accounts = await prisma.metaAdAccount.findMany({
     where: { clientId: session.user.clientId },
@@ -44,7 +45,11 @@ export async function POST(req: NextRequest) {
 
   await prisma.metaAdAccount.update({
     where: { id: account.id },
-    data: { pixelId: pixelId || null, capiAccessToken: capiAccessToken || null },
+    data: {
+      pixelId: pixelId || null,
+      capiAccessToken: capiAccessToken || null,
+      sendUnattributedConversions: Boolean(sendUnattributedConversions),
+    },
   });
 
   return NextResponse.json({ success: true });

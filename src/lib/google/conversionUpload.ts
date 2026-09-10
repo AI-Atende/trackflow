@@ -129,7 +129,7 @@ export async function uploadGoogleConversion({
   clientId,
   lead,
   conversionActionId,
-}: UploadGoogleConversionInput): Promise<void> {
+}: UploadGoogleConversionInput): Promise<string | null> {
   const [account, fieldMapping] = await Promise.all([
     resolveActiveAccount(clientId),
     prisma.kommoFieldMapping.findUnique({ where: { clientId } }),
@@ -190,5 +190,20 @@ export async function uploadGoogleConversion({
     partial_failure: true,
   });
 
-  await customer.conversionUploads.uploadClickConversions(request);
+  const response = await customer.conversionUploads.uploadClickConversions(request);
+
+  // `partial_failure: true` above means the gRPC call itself can return success while THIS
+  // conversion (the only one in the batch) still failed validation — the library decodes that
+  // into response.partial_failure_error rather than throwing. Silently ignoring it (as before)
+  // meant some sends were marked SENT despite Google having rejected the actual conversion.
+  const partialFailure = (response as { partial_failure_error?: unknown })?.partial_failure_error;
+  if (partialFailure) {
+    throw new Error(`Google Ads partial failure: ${JSON.stringify(partialFailure)}`);
+  }
+
+  try {
+    return JSON.stringify(response);
+  } catch {
+    return null;
+  }
 }

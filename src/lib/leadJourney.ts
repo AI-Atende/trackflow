@@ -112,6 +112,52 @@ async function extractAttributionFromKommoLead(
   };
 }
 
+type AttributionType = 'TRACKED' | 'EXTERNAL' | 'UNTRACKED';
+
+function decideAttributionType(
+  lead: {
+    fbclid: string | null;
+    gclid: string | null;
+    gbraid: string | null;
+    wbraid: string | null;
+    matchedMappedAdId: string | null;
+  },
+  hasMatchedMessage: boolean,
+): AttributionType {
+  if (lead.fbclid || lead.gclid || lead.gbraid || lead.wbraid || lead.matchedMappedAdId) {
+    return 'TRACKED';
+  }
+  return hasMatchedMessage ? 'EXTERNAL' : 'UNTRACKED';
+}
+
+/**
+ * Classifies how a lead reached the funnel: 'TRACKED' (a click id, or resolved to a registered
+ * MappedAd — what already fires conversions today), 'EXTERNAL' (some message matched a
+ * PixelSession/code/UTM, but never resolved to a registered ad — a bio link, an in-person
+ * partner referral, etc.), or 'UNTRACKED' (no matched message at all — direct WhatsApp contact,
+ * no signal whatsoever). Drives the /leads UI badge and, when a client opts in via
+ * MetaAdAccount.sendUnattributedConversions, whether non-TRACKED leads still fire Meta events
+ * (see fireConversionEvents below).
+ */
+async function classifyAttribution(
+  clientId: string,
+  lead: {
+    waId: string | null;
+    fbclid: string | null;
+    gclid: string | null;
+    gbraid: string | null;
+    wbraid: string | null;
+    matchedMappedAdId: string | null;
+  },
+): Promise<AttributionType> {
+  if (!lead.waId) return decideAttributionType(lead, false);
+  const matchedMessage = await prisma.trackedMessage.findFirst({
+    where: { clientId, waId: lead.waId, matchStrategy: { not: 'UNMATCHED' } },
+    select: { id: true },
+  });
+  return decideAttributionType(lead, Boolean(matchedMessage));
+}
+
 /**
  * Ranks a lead's current Kommo status against every JourneyStage mapped in that SAME pipeline,
  * using the pipeline's real status order (PipelineStatus.sort) — not an exact status_id match.
@@ -199,16 +245,27 @@ export async function processLeadStageChange(input: ProcessStageChangeInput): Pr
     }
   }
 
+  const attributionType = await classifyAttribution(clientId, {
+    waId: attribution?.waId ?? existingLead?.waId ?? null,
+    fbclid: attribution?.fbclid ?? existingLead?.fbclid ?? null,
+    gclid: attribution?.gclid ?? existingLead?.gclid ?? null,
+    gbraid: attribution?.gbraid ?? existingLead?.gbraid ?? null,
+    wbraid: attribution?.wbraid ?? existingLead?.wbraid ?? null,
+    matchedMappedAdId: attribution?.matchedMappedAdId ?? existingLead?.matchedMappedAdId ?? null,
+  });
+
   const lead = await prisma.lead.upsert({
     where: { clientId_kommoLeadId: { clientId, kommoLeadId } },
     create: {
       clientId,
       kommoLeadId,
       currentJourneyStageId: currentStage.id,
+      attributionType,
       ...(attribution ?? {}),
     },
     update: {
       currentJourneyStageId: currentStage.id,
+      attributionType,
       ...(attribution ?? {}),
     },
   });
@@ -295,16 +352,19 @@ export async function importExistingLeadsFromKommo(
             clientId,
             lead,
           );
+          const attributionType = await classifyAttribution(clientId, attribution);
           await prisma.lead.upsert({
             where: { clientId_kommoLeadId: { clientId, kommoLeadId: lead.id } },
             create: {
               clientId,
               kommoLeadId: lead.id,
               currentJourneyStageId: currentStage.id,
+              attributionType,
               ...attribution,
             },
             update: {
               currentJourneyStageId: currentStage.id,
+              attributionType,
               ...attribution,
             },
           });
@@ -333,8 +393,24 @@ async function fireConversionEvents(
   journeyStage: JourneyStageRow,
 ): Promise<void> {
   const targets: { platform: 'META' | 'GOOGLE'; eventName: string }[] = [];
-  if (journeyStage.metaEventName)
-    targets.push({ platform: 'META', eventName: journeyStage.metaEventName });
+
+  if (journeyStage.metaEventName) {
+    // TRACKED leads always fire, same as before this field existed. A non-TRACKED lead (no
+    // click id, no registered-ad match) only fires if the client explicitly opted in — sending
+    // conversions for unattributed leads by default would misrepresent ad performance.
+    let allowed = lead.attributionType === 'TRACKED';
+    if (!allowed) {
+      const metaAccounts = await prisma.metaAdAccount.findMany({ where: { clientId } });
+      const account = metaAccounts.find((a) => a.status === 'ACTIVE') ?? metaAccounts[0];
+      allowed = account?.sendUnattributedConversions ?? false;
+    }
+    if (allowed) targets.push({ platform: 'META', eventName: journeyStage.metaEventName });
+  }
+
+  // GOOGLE: unchanged regardless of attributionType — uploadGoogleConversion already hard-
+  // requires gclid/gbraid/wbraid, which a non-TRACKED lead never has, so it naturally no-ops via
+  // that existing guard. No opt-in exists for Google yet (would need a different API — Enhanced
+  // Conversions for Leads — to accept a lead with only hashed email/phone).
   if (journeyStage.googleConversionActionId) {
     targets.push({ platform: 'GOOGLE', eventName: journeyStage.googleConversionActionId });
   }
@@ -419,14 +495,13 @@ export async function attemptSendConversionEvent(
   stageLabel: string,
 ): Promise<void> {
   try {
-    if (platform === 'META') {
-      await sendMetaConversionEvent({ clientId, lead, eventName });
-    } else {
-      await uploadGoogleConversion({ clientId, lead, conversionActionId: eventName });
-    }
+    const responseDetail =
+      platform === 'META'
+        ? await sendMetaConversionEvent({ clientId, lead, eventName })
+        : await uploadGoogleConversion({ clientId, lead, conversionActionId: eventName });
     await prisma.conversionEventLog.update({
       where: { id: logId },
-      data: { status: 'SENT', sentAt: new Date(), attempts: { increment: 1 } },
+      data: { status: 'SENT', sentAt: new Date(), attempts: { increment: 1 }, responseDetail },
     });
   } catch (err) {
     await prisma.conversionEventLog.update({

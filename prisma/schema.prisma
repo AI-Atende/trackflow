@@ -89,6 +89,13 @@ model MetaAdAccount {
   pixelId         String?
   capiAccessToken String?
 
+  // Opt-in — off by default, since sending a conversion for a lead with no ad-click id or
+  // registered-ad match is a deliberate choice, not the norm. When true, fireConversionEvents
+  // also sends Meta events for leads classified EXTERNAL/UNTRACKED (see Lead.attributionType),
+  // not just TRACKED ones. Google has no equivalent yet — it hard-requires gclid/gbraid/wbraid,
+  // which those leads never have.
+  sendUnattributedConversions Boolean @default(false)
+
   createdAt      DateTime            @default(now())
   updatedAt      DateTime            @updatedAt
 
@@ -558,6 +565,13 @@ model Lead {
   currentJourneyStageId String?
   currentJourneyStage   JourneyStage? @relation(fields: [currentJourneyStageId], references: [id])
 
+  // 'TRACKED' (fbclid/gclid/gbraid/wbraid present, or resolved to a registered MappedAd) |
+  // 'EXTERNAL' (a message matched a PixelSession/code, but not to a registered ad — bio link,
+  // in-person partner referral, etc.) | 'UNTRACKED' (no matched message at all) | null (not
+  // classified yet — leads that existed before this field, until their next sync). See
+  // classifyAttribution in lib/leadJourney.ts.
+  attributionType String?
+
   conversionEventLogs ConversionEventLog[]
 
   createdAt DateTime @default(now())
@@ -565,6 +579,7 @@ model Lead {
 
   @@unique([clientId, kommoLeadId])
   @@index([clientId])
+  @@index([clientId, currentJourneyStageId])
 }
 
 // One row per (lead, stage, platform) — ever. The unique constraint is the idempotency guard:
@@ -585,8 +600,12 @@ model ConversionEventLog {
   eventName    String
   status       String    @default("PENDING") // PENDING | SENT | FAILED
   errorMessage String?
-  sentAt       DateTime?
-  attempts     Int       @default(0)
+  // Raw JSON of the platform's response body on a SENT send — Meta's {events_received,
+  // fbtrace_id, messages} or Google's UploadClickConversionsResponse — kept for traceability
+  // (e.g. fbtrace_id to reference in a Meta support case) without needing to trust "SENT" alone.
+  responseDetail String?
+  sentAt         DateTime?
+  attempts       Int       @default(0)
 
   createdAt DateTime @default(now())
 

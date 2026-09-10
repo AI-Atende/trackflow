@@ -86,7 +86,7 @@ export async function sendMetaConversionEvent({
   clientId,
   lead,
   eventName,
-}: SendMetaConversionEventInput): Promise<void> {
+}: SendMetaConversionEventInput): Promise<string | null> {
   const [accounts, fieldMapping, client] = await Promise.all([
     prisma.metaAdAccount.findMany({ where: { clientId } }),
     prisma.kommoFieldMapping.findUnique({ where: { clientId } }),
@@ -165,4 +165,9 @@ export async function sendMetaConversionEvent({
     const text = await res.text();
     throw new Error(`Meta CAPI error ${res.status}: ${text}`);
   }
+
+  // Success body is {events_received, messages, fbtrace_id} — kept verbatim so the fbtrace_id is
+  // available to reference in a Meta support case even for a send that otherwise looks "done".
+  const body = await res.text();
+  return body || null;
 }

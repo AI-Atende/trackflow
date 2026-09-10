@@ -27,6 +27,7 @@ export async function GET() {
             eventName: true,
             status: true,
             errorMessage: true,
+            responseDetail: true,
             sentAt: true,
             createdAt: true,
             attempts: true,
