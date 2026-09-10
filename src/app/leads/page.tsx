@@ -12,6 +12,7 @@ import {
   User,
   Megaphone,
   Download,
+  Search,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { Sidebar } from '@/components/Sidebar';
@@ -100,6 +101,9 @@ export default function LeadsPage() {
   const [selectedLead, setSelectedLead] = useState<LeadRow | null>(null);
   const [movingLeadId, setMovingLeadId] = useState<string | null>(null);
   const [isImporting, setIsImporting] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [minValue, setMinValue] = useState('');
+  const [maxValue, setMaxValue] = useState('');
 
   const fetchLeads = useCallback(async () => {
     setIsLoading(true);
@@ -166,16 +170,53 @@ export default function LeadsPage() {
     }
   };
 
+  const filteredLeads = useMemo(() => {
+    const term = searchTerm.trim().toLowerCase();
+    const digitsTerm = searchTerm.replace(/\D/g, '');
+    const min = minValue.trim() !== '' ? parseFloat(minValue.replace(',', '.')) : null;
+    const max = maxValue.trim() !== '' ? parseFloat(maxValue.replace(',', '.')) : null;
+
+    return leads.filter((lead) => {
+      if (term) {
+        const nameEmailMatch = [lead.firstName, lead.lastName, lead.email]
+          .filter(Boolean)
+          .join(' ')
+          .toLowerCase()
+          .includes(term);
+        // Phone search tolerates formatting (spaces, parens, dashes) since waId is stored as
+        // digits only — matching against digitsTerm covers both a raw and a formatted query.
+        const phoneMatch = digitsTerm.length > 0 && (lead.waId?.includes(digitsTerm) ?? false);
+        if (!nameEmailMatch && !phoneMatch) return false;
+      }
+      if (min !== null && !Number.isNaN(min) && (lead.saleValue == null || lead.saleValue < min)) {
+        return false;
+      }
+      if (max !== null && !Number.isNaN(max) && (lead.saleValue == null || lead.saleValue > max)) {
+        return false;
+      }
+      return true;
+    });
+  }, [leads, searchTerm, minValue, maxValue]);
+
+  const hasActiveFilters =
+    searchTerm.trim() !== '' || minValue.trim() !== '' || maxValue.trim() !== '';
+
+  const clearFilters = () => {
+    setSearchTerm('');
+    setMinValue('');
+    setMaxValue('');
+  };
+
   const groups = useMemo(() => {
     const byStage = new Map<string, LeadRow[]>();
-    for (const lead of leads) {
+    for (const lead of filteredLeads) {
       const key = lead.currentJourneyStage?.id ?? 'none';
       const arr = byStage.get(key) ?? [];
       arr.push(lead);
       byStage.set(key, arr);
     }
     return byStage;
-  }, [leads]);
+  }, [filteredLeads]);
 
   const toggleStage = (stageId: string) => {
     setExpandedStages((prev) => {
@@ -235,6 +276,54 @@ export default function LeadsPage() {
               etapas em Configurações → Kommo. Mudar a etapa aqui também move o lead no Kommo.
             </p>
 
+            <div className="flex flex-col sm:flex-row gap-3">
+              <div className="relative flex-1">
+                <Search
+                  size={16}
+                  className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+                />
+                <input
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  placeholder="Buscar por nome, telefone ou e-mail..."
+                  className="w-full pl-9 pr-3 py-2 text-sm bg-card border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500/40"
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  value={minValue}
+                  onChange={(e) => setMinValue(e.target.value)}
+                  placeholder="Valor mín."
+                  className="w-28 px-3 py-2 text-sm bg-card border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500/40"
+                />
+                <span className="text-muted-foreground text-sm">–</span>
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  value={maxValue}
+                  onChange={(e) => setMaxValue(e.target.value)}
+                  placeholder="Valor máx."
+                  className="w-28 px-3 py-2 text-sm bg-card border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500/40"
+                />
+              </div>
+              {hasActiveFilters && (
+                <button
+                  onClick={clearFilters}
+                  className="text-sm text-muted-foreground hover:text-foreground px-3 py-2 rounded-lg hover:bg-secondary transition-colors shrink-0"
+                >
+                  Limpar filtros
+                </button>
+              )}
+            </div>
+
+            {hasActiveFilters && !isLoading && (
+              <p className="text-xs text-muted-foreground">
+                {filteredLeads.length} de {leads.length} lead(s) correspondem aos filtros.
+              </p>
+            )}
+
             {isLoading ? (
               <p className="text-sm text-muted-foreground">Carregando...</p>
             ) : stages.length === 0 ? (
@@ -275,7 +364,9 @@ export default function LeadsPage() {
                           <div className="border-t border-border divide-y divide-border">
                             {stageLeads.length === 0 ? (
                               <p className="p-4 text-sm text-muted-foreground">
-                                Nenhum lead nessa etapa ainda.
+                                {hasActiveFilters
+                                  ? 'Nenhum lead nessa etapa corresponde aos filtros.'
+                                  : 'Nenhum lead nessa etapa ainda.'}
                               </p>
                             ) : (
                               stageLeads.map((lead) => (
