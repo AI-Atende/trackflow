@@ -13,6 +13,7 @@ import {
   Megaphone,
   Download,
   Search,
+  RotateCw,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { Sidebar } from '@/components/Sidebar';
@@ -34,7 +35,37 @@ interface ConversionEventLogRow {
   errorMessage: string | null;
   sentAt: string | null;
   createdAt: string;
+  attempts: number;
   journeyStage: { label: string };
+}
+
+interface ParsedErrorDetail {
+  title: string | null;
+  description: string | null;
+  raw: string;
+}
+
+// Meta CAPI errors come back as "Meta CAPI error <status>: {json}" — pulling error_user_title/
+// error_user_msg out of that JSON (already localized by Meta) reads far better than the raw
+// blob. Google/other errors have no embedded JSON, so they just fall back to the raw text.
+function parseErrorDetail(raw: string | null): ParsedErrorDetail | null {
+  if (!raw) return null;
+  const jsonStart = raw.indexOf('{');
+  if (jsonStart === -1) return { title: null, description: null, raw };
+  try {
+    const parsed = JSON.parse(raw.slice(jsonStart));
+    const err = parsed?.error;
+    if (err) {
+      return {
+        title: err.error_user_title || err.message || null,
+        description: err.error_user_msg || null,
+        raw,
+      };
+    }
+  } catch {
+    // not JSON — fall through to raw-only
+  }
+  return { title: null, description: null, raw };
 }
 
 interface LeadRow {
@@ -104,6 +135,8 @@ export default function LeadsPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [minValue, setMinValue] = useState('');
   const [maxValue, setMaxValue] = useState('');
+  const [retryingLogId, setRetryingLogId] = useState<string | null>(null);
+  const [expandedLogId, setExpandedLogId] = useState<string | null>(null);
 
   const fetchLeads = useCallback(async () => {
     setIsLoading(true);
@@ -149,6 +182,42 @@ export default function LeadsPage() {
       showToast(err instanceof Error ? err.message : 'Erro ao mover o lead', 'error');
     } finally {
       setMovingLeadId(null);
+    }
+  };
+
+  const retryConversionEvent = async (leadId: string, logId: string) => {
+    setRetryingLogId(logId);
+    try {
+      const res = await fetch(`/api/leads/${leadId}/conversion-events/${logId}/retry`, {
+        method: 'POST',
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Falha ao tentar novamente');
+      const updatedLog = data.log;
+      showToast(
+        updatedLog?.status === 'SENT'
+          ? 'Evento reenviado com sucesso!'
+          : 'O reenvio falhou novamente — confira o motivo no badge.',
+        updatedLog?.status === 'SENT' ? 'success' : 'error',
+      );
+      const patchLogs = (logs: ConversionEventLogRow[]) =>
+        logs.map((l) => (l.id === logId ? { ...l, ...updatedLog } : l));
+      setLeads((prev) =>
+        prev.map((lead) =>
+          lead.id !== leadId
+            ? lead
+            : { ...lead, conversionEventLogs: patchLogs(lead.conversionEventLogs) },
+        ),
+      );
+      setSelectedLead((prev) =>
+        prev && prev.id === leadId
+          ? { ...prev, conversionEventLogs: patchLogs(prev.conversionEventLogs) }
+          : prev,
+      );
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Erro ao tentar novamente', 'error');
+    } finally {
+      setRetryingLogId(null);
     }
   };
 
@@ -504,28 +573,127 @@ export default function LeadsPage() {
                   <p className="text-xs text-muted-foreground">Nenhum evento disparado ainda.</p>
                 ) : (
                   <div className="space-y-1.5">
-                    {selectedLead.conversionEventLogs.map((log) => (
-                      <div
-                        key={log.id}
-                        className="flex items-center justify-between gap-2 bg-secondary/30 border border-border rounded-lg px-3 py-2"
-                      >
-                        <div className="min-w-0">
-                          <p className="text-xs font-medium truncate">
-                            {log.eventName} · {log.journeyStage.label}
-                          </p>
-                          <p className="text-[11px] text-muted-foreground">
-                            {log.platform} ·{' '}
-                            {format(new Date(log.sentAt ?? log.createdAt), 'dd/MM/yyyy HH:mm')}
-                          </p>
-                        </div>
-                        <span
-                          className={`text-[11px] shrink-0 border px-2 py-0.5 rounded-full font-medium ${statusBadgeClasses(log.status)}`}
-                          title={log.errorMessage ?? undefined}
+                    {selectedLead.conversionEventLogs.map((log) => {
+                      const isExpanded = expandedLogId === log.id;
+                      const errorDetail = parseErrorDetail(log.errorMessage);
+                      return (
+                        <div
+                          key={log.id}
+                          className="bg-secondary/30 border border-border rounded-lg overflow-hidden"
                         >
-                          {log.status}
-                        </span>
-                      </div>
-                    ))}
+                          <button
+                            onClick={() =>
+                              setExpandedLogId((prev) => (prev === log.id ? null : log.id))
+                            }
+                            className="w-full flex items-center justify-between gap-2 px-3 py-2 text-left hover:bg-secondary/40 transition-colors"
+                          >
+                            <div className="min-w-0">
+                              <p className="text-xs font-medium truncate">
+                                {log.eventName} · {log.journeyStage.label}
+                              </p>
+                              <p className="text-[11px] text-muted-foreground">
+                                {log.platform} ·{' '}
+                                {format(new Date(log.sentAt ?? log.createdAt), 'dd/MM/yyyy HH:mm')}
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              <span
+                                className={`text-[11px] border px-2 py-0.5 rounded-full font-medium ${statusBadgeClasses(log.status)}`}
+                              >
+                                {log.status}
+                              </span>
+                              {log.status === 'FAILED' && (
+                                <span
+                                  role="button"
+                                  tabIndex={0}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    retryConversionEvent(selectedLead.id, log.id);
+                                  }}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter' || e.key === ' ') {
+                                      e.preventDefault();
+                                      e.stopPropagation();
+                                      retryConversionEvent(selectedLead.id, log.id);
+                                    }
+                                  }}
+                                  title="Tentar novamente"
+                                  className="text-muted-foreground hover:text-foreground transition-colors p-1 rounded-md hover:bg-secondary cursor-pointer"
+                                >
+                                  <RotateCw
+                                    size={13}
+                                    className={retryingLogId === log.id ? 'animate-spin' : ''}
+                                  />
+                                </span>
+                              )}
+                              {isExpanded ? (
+                                <ChevronDown size={14} className="text-muted-foreground" />
+                              ) : (
+                                <ChevronRight size={14} className="text-muted-foreground" />
+                              )}
+                            </div>
+                          </button>
+
+                          {isExpanded && (
+                            <div className="border-t border-border px-3 py-2.5 space-y-2 bg-background/40">
+                              <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[11px]">
+                                <div>
+                                  <span className="text-muted-foreground">Tentativas: </span>
+                                  <span className="font-medium">{log.attempts}</span>
+                                </div>
+                                <div>
+                                  <span className="text-muted-foreground">Criado em: </span>
+                                  <span className="font-medium">
+                                    {format(new Date(log.createdAt), 'dd/MM/yyyy HH:mm')}
+                                  </span>
+                                </div>
+                                {log.sentAt && (
+                                  <div className="col-span-2">
+                                    <span className="text-muted-foreground">Enviado em: </span>
+                                    <span className="font-medium">
+                                      {format(new Date(log.sentAt), 'dd/MM/yyyy HH:mm')}
+                                    </span>
+                                  </div>
+                                )}
+                              </div>
+
+                              {log.status === 'SENT' && (
+                                <p className="text-[11px] text-green-600 dark:text-green-400">
+                                  Evento confirmado na plataforma — sem erros.
+                                </p>
+                              )}
+
+                              {errorDetail && (
+                                <div className="space-y-1.5">
+                                  {(errorDetail.title || errorDetail.description) && (
+                                    <div className="bg-red-500/10 border border-red-500/20 rounded-md px-2.5 py-2 space-y-0.5">
+                                      {errorDetail.title && (
+                                        <p className="text-[11px] font-semibold text-red-600 dark:text-red-400">
+                                          {errorDetail.title}
+                                        </p>
+                                      )}
+                                      {errorDetail.description && (
+                                        <p className="text-[11px] text-red-600/90 dark:text-red-400/90">
+                                          {errorDetail.description}
+                                        </p>
+                                      )}
+                                    </div>
+                                  )}
+                                  <details className="text-[11px]">
+                                    <summary className="cursor-pointer text-muted-foreground hover:text-foreground select-none">
+                                      Detalhes técnicos
+                                    </summary>
+                                    <pre className="mt-1 whitespace-pre-wrap break-all bg-secondary/50 border border-border rounded-md p-2 font-mono text-[10px] text-muted-foreground max-h-40 overflow-y-auto">
+                                      {errorDetail.raw}
+                                    </pre>
+                                  </details>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </div>

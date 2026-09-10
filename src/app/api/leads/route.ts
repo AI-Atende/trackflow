@@ -29,6 +29,7 @@ export async function GET() {
             errorMessage: true,
             sentAt: true,
             createdAt: true,
+            attempts: true,
             journeyStage: { select: { label: true } },
           },
           orderBy: { createdAt: 'desc' },

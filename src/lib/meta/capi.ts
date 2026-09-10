@@ -79,6 +79,9 @@ export async function sendMetaConversionEvent({
           event_name: eventName,
           event_time: Math.floor(Date.now() / 1000),
           action_source: 'business_messaging',
+          // Required by Meta whenever action_source is business_messaging — omitting it fails
+          // every event with "Missing messaging channel parameter" (error_subcode 2804063).
+          messaging_channel: 'whatsapp',
           user_data: userData,
           ...(Object.keys(customData).length > 0 ? { custom_data: customData } : {}),
         },
