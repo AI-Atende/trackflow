@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma';
 import { getKommoClientForClient } from '@/lib/kommo-auth';
 import { sendMetaConversionEvent } from '@/lib/meta/capi';
 import { uploadGoogleConversion } from '@/lib/google/conversionUpload';
+import { brPhoneVariants } from '@/lib/phone';
 
 export type StageChangeSource = 'webhook' | 'manual' | 'api';
 
@@ -152,7 +153,11 @@ async function classifyAttribution(
 ): Promise<AttributionType> {
   if (!lead.waId) return decideAttributionType(lead, false);
   const matchedMessage = await prisma.trackedMessage.findFirst({
-    where: { clientId, waId: lead.waId, matchStrategy: { not: 'UNMATCHED' } },
+    where: {
+      clientId,
+      waId: { in: brPhoneVariants(lead.waId) },
+      matchStrategy: { not: 'UNMATCHED' },
+    },
     select: { id: true },
   });
   return decideAttributionType(lead, Boolean(matchedMessage));

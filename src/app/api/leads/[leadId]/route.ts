@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { brPhoneVariants } from '@/lib/phone';
 
 // DELETE /api/leads/[leadId] — hard delete a Lead, its ConversionEventLog history, and the
 // TrackedMessage rows for its phone number. Mainly a testing convenience: Lead's
@@ -30,7 +31,11 @@ export async function DELETE(
   await prisma.$transaction([
     prisma.conversionEventLog.deleteMany({ where: { leadId } }),
     ...(lead.waId
-      ? [prisma.trackedMessage.deleteMany({ where: { clientId: lead.clientId, waId: lead.waId } })]
+      ? [
+          prisma.trackedMessage.deleteMany({
+            where: { clientId: lead.clientId, waId: { in: brPhoneVariants(lead.waId) } },
+          }),
+        ]
       : []),
     prisma.lead.delete({ where: { id: leadId } }),
   ]);

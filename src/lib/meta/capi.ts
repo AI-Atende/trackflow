@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 import { prisma } from '@/lib/prisma';
 import { fetchPortalWhatsAppNumbers } from '@/lib/portal-client';
+import { brPhoneVariants } from '@/lib/phone';
 
 const META_GRAPH_API_BASE = 'https://graph.facebook.com/v19.0';
 
@@ -52,7 +53,7 @@ async function resolveMessagingAttribution(
   const none: MessagingAttribution = { wabaId: null, ctwaClid: null };
 
   const lastMessage = await prisma.trackedMessage.findFirst({
-    where: { clientId, waId, phoneNumberId: { not: null } },
+    where: { clientId, waId: { in: brPhoneVariants(waId) }, phoneNumberId: { not: null } },
     orderBy: { receivedAt: 'desc' },
     select: { phoneNumberId: true, ctwaClid: true, receivedAt: true },
   });

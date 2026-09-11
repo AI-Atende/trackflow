@@ -83,6 +83,18 @@ interface TrackedMessageRow {
   channel: string | null;
   matchedTrackingLink: { label: string; waNumber: string } | null;
   matchedMappedAd: { adName: string; campaignName: string; platform: 'META' | 'GOOGLE' } | null;
+  matchedPixelSession: {
+    utmSource: string | null;
+    utmMedium: string | null;
+    utmCampaign: string | null;
+    utmContent: string | null;
+    utmTerm: string | null;
+    fbclid: string | null;
+    gclid: string | null;
+    gbraid: string | null;
+    wbraid: string | null;
+    landingUrl: string | null;
+  } | null;
   kommoLeadId: string | null;
   kommoSyncStatus: string;
   kommoSyncError: string | null;
@@ -764,6 +776,34 @@ export default function LeadsPage() {
                               Link: {msg.matchedTrackingLink.label}
                             </p>
                           )}
+                          {msg.matchedPixelSession &&
+                            (() => {
+                              const session = msg.matchedPixelSession;
+                              const pills = [
+                                ['utm_source', session.utmSource],
+                                ['utm_medium', session.utmMedium],
+                                ['utm_campaign', session.utmCampaign],
+                                ['utm_content', session.utmContent],
+                                ['utm_term', session.utmTerm],
+                                ['fbclid', session.fbclid],
+                                ['gclid', session.gclid],
+                                ['gbraid', session.gbraid],
+                                ['wbraid', session.wbraid],
+                              ].filter((pair): pair is [string, string] => Boolean(pair[1]));
+                              if (pills.length === 0) return null;
+                              return (
+                                <div className="flex flex-wrap gap-1">
+                                  {pills.map(([key, value]) => (
+                                    <span
+                                      key={key}
+                                      className="text-[10px] bg-secondary/50 border border-border rounded px-1.5 py-0.5 font-mono text-muted-foreground break-all"
+                                    >
+                                      {key}={value}
+                                    </span>
+                                  ))}
+                                </div>
+                              );
+                            })()}
                           {msg.channel && (
                             <p className="text-[11px] text-muted-foreground">
                               Recebido via{' '}
