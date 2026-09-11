@@ -15,6 +15,8 @@ import {
   Search,
   RotateCw,
   Trash2,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { Sidebar } from '@/components/Sidebar';
@@ -240,6 +242,7 @@ export default function LeadsPage() {
   const [expandedLogId, setExpandedLogId] = useState<string | null>(null);
   const [trackedMessages, setTrackedMessages] = useState<TrackedMessageRow[]>([]);
   const [isLoadingTrackedMessages, setIsLoadingTrackedMessages] = useState(false);
+  const [showAllTrackedMessages, setShowAllTrackedMessages] = useState(false);
   const [isDeletingLead, setIsDeletingLead] = useState(false);
 
   const fetchLeads = useCallback(async () => {
@@ -263,8 +266,9 @@ export default function LeadsPage() {
 
   const selectedLeadId = selectedLead?.id ?? null;
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setShowAllTrackedMessages(false);
     if (!selectedLeadId) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setTrackedMessages([]);
       return;
     }
@@ -729,100 +733,144 @@ export default function LeadsPage() {
               </div>
 
               <div className="space-y-2 pt-2 border-t border-border">
-                <p className="text-xs text-muted-foreground">
-                  Rastreamento (mensagens que geraram atribuição)
-                </p>
-                {isLoadingTrackedMessages ? (
-                  <p className="text-xs text-muted-foreground">Carregando...</p>
-                ) : trackedMessages.length === 0 ? (
-                  <p className="text-xs text-muted-foreground">
-                    Nenhuma mensagem rastreada encontrada pra esse telefone.
-                  </p>
-                ) : (
-                  <div className="space-y-1.5">
-                    {trackedMessages.map((msg) => {
-                      const isMatched = msg.matchStrategy !== 'UNMATCHED';
-                      return (
-                        <div
-                          key={msg.id}
-                          className="bg-secondary/30 border border-border rounded-lg px-3 py-2 space-y-1"
-                        >
-                          <div className="flex items-center justify-between gap-2">
-                            <span
-                              className={`text-[11px] border px-2 py-0.5 rounded-full font-medium ${
-                                isMatched
-                                  ? 'bg-green-500/10 text-green-600 dark:text-green-400 border-green-500/20'
-                                  : 'bg-secondary text-muted-foreground border-border'
-                              }`}
-                            >
-                              {matchStrategyLabel(msg.matchStrategy)}
-                            </span>
-                            <span className="text-[11px] text-muted-foreground shrink-0">
-                              {format(new Date(msg.receivedAt), 'dd/MM/yyyy HH:mm')}
-                            </span>
-                          </div>
-                          <p className="text-xs text-foreground/90 break-words line-clamp-2">
-                            &ldquo;{msg.text}&rdquo;
-                          </p>
-                          {msg.matchedMappedAd && (
-                            <p className="text-[11px] text-muted-foreground flex items-center gap-1">
-                              <Megaphone size={11} />
-                              {msg.matchedMappedAd.adName} · {msg.matchedMappedAd.campaignName} (
-                              {msg.matchedMappedAd.platform})
-                            </p>
-                          )}
-                          {msg.matchedTrackingLink && (
-                            <p className="text-[11px] text-muted-foreground">
-                              Link: {msg.matchedTrackingLink.label}
-                            </p>
-                          )}
-                          {msg.matchedPixelSession &&
-                            (() => {
-                              const session = msg.matchedPixelSession;
-                              const pills = [
-                                ['utm_source', session.utmSource],
-                                ['utm_medium', session.utmMedium],
-                                ['utm_campaign', session.utmCampaign],
-                                ['utm_content', session.utmContent],
-                                ['utm_term', session.utmTerm],
-                                ['fbclid', session.fbclid],
-                                ['gclid', session.gclid],
-                                ['gbraid', session.gbraid],
-                                ['wbraid', session.wbraid],
-                              ].filter((pair): pair is [string, string] => Boolean(pair[1]));
-                              if (pills.length === 0) return null;
+                {(() => {
+                  const matchedMessages = trackedMessages.filter(
+                    (m) => m.matchStrategy !== 'UNMATCHED',
+                  );
+                  const hiddenCount = trackedMessages.length - matchedMessages.length;
+                  const visibleMessages = showAllTrackedMessages
+                    ? trackedMessages
+                    : matchedMessages;
+                  return (
+                    <>
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-xs text-muted-foreground">
+                          Rastreamento (mensagens que geraram atribuição)
+                        </p>
+                        {trackedMessages.length > 0 && hiddenCount > 0 && (
+                          <button
+                            onClick={() => setShowAllTrackedMessages((prev) => !prev)}
+                            title={
+                              showAllTrackedMessages
+                                ? 'Ocultar mensagens sem correspondência'
+                                : 'Mostrar todas as mensagens, incluindo sem correspondência'
+                            }
+                            className="text-muted-foreground hover:text-foreground transition-colors p-1 rounded-md hover:bg-secondary shrink-0"
+                          >
+                            {showAllTrackedMessages ? <EyeOff size={14} /> : <Eye size={14} />}
+                          </button>
+                        )}
+                      </div>
+
+                      {isLoadingTrackedMessages ? (
+                        <p className="text-xs text-muted-foreground">Carregando...</p>
+                      ) : trackedMessages.length === 0 ? (
+                        <p className="text-xs text-muted-foreground">
+                          Nenhuma mensagem rastreada encontrada pra esse telefone.
+                        </p>
+                      ) : visibleMessages.length === 0 ? (
+                        <p className="text-xs text-muted-foreground">
+                          Nenhuma mensagem com correspondência real — {hiddenCount} mensagem(ns) sem
+                          correspondência oculta(s). Clique no ícone de olho pra ver.
+                        </p>
+                      ) : (
+                        <>
+                          <div className="space-y-1.5">
+                            {visibleMessages.map((msg) => {
+                              const isMatched = msg.matchStrategy !== 'UNMATCHED';
                               return (
-                                <div className="flex flex-wrap gap-1">
-                                  {pills.map(([key, value]) => (
+                                <div
+                                  key={msg.id}
+                                  className="bg-secondary/30 border border-border rounded-lg px-3 py-2 space-y-1"
+                                >
+                                  <div className="flex items-center justify-between gap-2">
                                     <span
-                                      key={key}
-                                      className="text-[10px] bg-secondary/50 border border-border rounded px-1.5 py-0.5 font-mono text-muted-foreground break-all"
+                                      className={`text-[11px] border px-2 py-0.5 rounded-full font-medium ${
+                                        isMatched
+                                          ? 'bg-green-500/10 text-green-600 dark:text-green-400 border-green-500/20'
+                                          : 'bg-secondary text-muted-foreground border-border'
+                                      }`}
                                     >
-                                      {key}={value}
+                                      {matchStrategyLabel(msg.matchStrategy)}
                                     </span>
-                                  ))}
+                                    <span className="text-[11px] text-muted-foreground shrink-0">
+                                      {format(new Date(msg.receivedAt), 'dd/MM/yyyy HH:mm')}
+                                    </span>
+                                  </div>
+                                  <p className="text-xs text-foreground/90 break-words line-clamp-2">
+                                    &ldquo;{msg.text}&rdquo;
+                                  </p>
+                                  {msg.matchedMappedAd && (
+                                    <p className="text-[11px] text-muted-foreground flex items-center gap-1">
+                                      <Megaphone size={11} />
+                                      {msg.matchedMappedAd.adName} ·{' '}
+                                      {msg.matchedMappedAd.campaignName} (
+                                      {msg.matchedMappedAd.platform})
+                                    </p>
+                                  )}
+                                  {msg.matchedTrackingLink && (
+                                    <p className="text-[11px] text-muted-foreground">
+                                      Link: {msg.matchedTrackingLink.label}
+                                    </p>
+                                  )}
+                                  {msg.matchedPixelSession &&
+                                    (() => {
+                                      const pSession = msg.matchedPixelSession;
+                                      const pills = [
+                                        ['utm_source', pSession.utmSource],
+                                        ['utm_medium', pSession.utmMedium],
+                                        ['utm_campaign', pSession.utmCampaign],
+                                        ['utm_content', pSession.utmContent],
+                                        ['utm_term', pSession.utmTerm],
+                                        ['fbclid', pSession.fbclid],
+                                        ['gclid', pSession.gclid],
+                                        ['gbraid', pSession.gbraid],
+                                        ['wbraid', pSession.wbraid],
+                                      ].filter((pair): pair is [string, string] =>
+                                        Boolean(pair[1]),
+                                      );
+                                      if (pills.length === 0) return null;
+                                      return (
+                                        <div className="flex flex-wrap gap-1">
+                                          {pills.map(([key, value]) => (
+                                            <span
+                                              key={key}
+                                              className="text-[10px] bg-secondary/50 border border-border rounded px-1.5 py-0.5 font-mono text-muted-foreground break-all"
+                                            >
+                                              {key}={value}
+                                            </span>
+                                          ))}
+                                        </div>
+                                      );
+                                    })()}
+                                  {msg.channel && (
+                                    <p className="text-[11px] text-muted-foreground">
+                                      Recebido via{' '}
+                                      {msg.channel === 'whatsapp_lite'
+                                        ? 'WhatsApp Lite (QR Code)'
+                                        : 'WhatsApp (API oficial)'}
+                                    </p>
+                                  )}
+                                  <p
+                                    className="text-[11px] text-muted-foreground"
+                                    title={msg.kommoSyncError ?? undefined}
+                                  >
+                                    Sincronização Kommo: {msg.kommoSyncStatus}
+                                  </p>
                                 </div>
                               );
-                            })()}
-                          {msg.channel && (
+                            })}
+                          </div>
+                          {!showAllTrackedMessages && hiddenCount > 0 && (
                             <p className="text-[11px] text-muted-foreground">
-                              Recebido via{' '}
-                              {msg.channel === 'whatsapp_lite'
-                                ? 'WhatsApp Lite (QR Code)'
-                                : 'WhatsApp (API oficial)'}
+                              +{hiddenCount} mensagem(ns) sem correspondência oculta(s).
                             </p>
                           )}
-                          <p
-                            className="text-[11px] text-muted-foreground"
-                            title={msg.kommoSyncError ?? undefined}
-                          >
-                            Sincronização Kommo: {msg.kommoSyncStatus}
-                          </p>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
+                        </>
+                      )}
+                    </>
+                  );
+                })()}
               </div>
 
               <div className="space-y-2 pt-2 border-t border-border">
