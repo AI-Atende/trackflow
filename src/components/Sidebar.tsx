@@ -14,6 +14,7 @@ import {
   ChevronRight,
   HelpCircle,
   Layers,
+  ContactRound,
 } from 'lucide-react';
 import { Select } from '@/components/ui/Select';
 import { useState, useEffect } from 'react';
@@ -75,6 +76,7 @@ export const Sidebar = ({
     { href: '/tracking-links', label: 'Rastreamento de Leads', icon: TrendingUp },
     { href: '/ad-catalog', label: 'Catálogo de Anúncios', icon: Layers },
     { href: '/leads', label: 'Jornada dos Leads', icon: Users },
+    { href: '/tracked-contacts', label: 'Contatos Rastreados', icon: ContactRound },
     { href: '/settings', label: 'Configurações', icon: Settings },
     { href: '/help', label: 'Ajuda', icon: HelpCircle },
   ];

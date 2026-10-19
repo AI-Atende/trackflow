@@ -2,8 +2,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { syncTrackedMessageToKommo } from '@/lib/kommoAttribution';
 import { extractInvisibleCode, extractVisibleCode } from '@/lib/tracking-codes';
+import { brPhoneVariants } from '@/lib/phone';
 
 const TIME_WINDOW_MINUTES = 30;
+// A number that already had a message attributed within this many days is a returning contact
+// (follow-ups, a longer conversation), not a new visitor — see hasRecentAttribution.
+const RETURNING_CONTACT_DAYS = 7;
 
 type MatchStrategy = 'CODE_INVISIBLE' | 'CODE_VISIBLE' | 'TIME_WINDOW' | 'AD_CODE' | 'UNMATCHED';
 
@@ -49,6 +53,7 @@ export async function POST(req: NextRequest) {
 
   const { matchStrategy, matchedSession, matchedMappedAd } = await matchIncomingMessage(
     client.id,
+    waId,
     text,
   );
 
@@ -89,6 +94,7 @@ export async function POST(req: NextRequest) {
 // correlate a CTWA message against without a code, so AD_CODE has no fallback of its own).
 async function matchIncomingMessage(
   clientId: string,
+  waId: string,
   text: string,
 ): Promise<{
   matchStrategy: MatchStrategy;
@@ -123,6 +129,14 @@ async function matchIncomingMessage(
     }
   }
 
+  // The time-window guess below pairs this message with "whoever visited recently and hasn't
+  // messaged yet". For a number that was already attributed, that is almost never true — it's a
+  // follow-up in an ongoing conversation — and the guess would instead steal the visit of a
+  // different person who scanned the QR code, leaving THEIR message with no origin.
+  if (await hasRecentAttribution(clientId, waId)) {
+    return { matchStrategy: 'UNMATCHED', matchedSession: null, matchedMappedAd: null };
+  }
+
   const since = new Date(Date.now() - TIME_WINDOW_MINUTES * 60_000);
   // Sessions created by a redirect link (slug set) only take part in this heuristic when the
   // link's owner opted in — either by choosing the TIME_WINDOW strategy or the explicit fallback
@@ -150,4 +164,18 @@ async function matchIncomingMessage(
   }
 
   return { matchStrategy: 'UNMATCHED', matchedSession: null, matchedMappedAd: null };
+}
+
+async function hasRecentAttribution(clientId: string, waId: string): Promise<boolean> {
+  const since = new Date(Date.now() - RETURNING_CONTACT_DAYS * 24 * 60 * 60 * 1000);
+  const prior = await prisma.trackedMessage.findFirst({
+    where: {
+      clientId,
+      waId: { in: brPhoneVariants(waId) },
+      matchStrategy: { not: 'UNMATCHED' },
+      receivedAt: { gte: since },
+    },
+    select: { id: true },
+  });
+  return prior !== null;
 }

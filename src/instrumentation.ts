@@ -23,8 +23,9 @@ export async function register() {
 
   // Re-attempts writing attribution to Kommo for messages whose lead didn't exist yet when they
   // arrived (the messaging platform creates it asynchronously). Backoff lives in the job itself;
-  // this just ticks every minute.
-  cron.schedule('* * * * *', () => {
+  // this just ticks every 10 seconds (node-cron's 6-field form) — the first retries are only
+  // seconds apart, so a once-a-minute tick would be the real floor on how fast a lead shows up.
+  cron.schedule('*/10 * * * * *', () => {
     runKommoSyncRetryJob().catch(console.error);
   });
 
@@ -34,6 +35,6 @@ export async function register() {
   });
 
   console.log(
-    '[instrumentation] Cron jobs registered (ad catalog sync: every 6h, conversion event retry: every 15min, Kommo sync retry: every 1min, redirect visit cleanup: daily)',
+    '[instrumentation] Cron jobs registered (ad catalog sync: every 6h, conversion event retry: every 15min, Kommo sync retry: every 10s, redirect visit cleanup: daily)',
   );
 }

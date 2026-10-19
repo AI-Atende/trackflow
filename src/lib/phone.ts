@@ -25,3 +25,16 @@ export function brPhoneVariants(waId: string): string[] {
   }
   return [digits];
 }
+
+/**
+ * Stable grouping key for "the same person" across the Brazilian with/without-9 spellings of a
+ * mobile number (see brPhoneVariants): both forms of 55 + DDD + [9] + 8 digits map to the
+ * without-9 form. Only for grouping/display — never send this key anywhere as a phone number.
+ */
+export function phoneKey(waId: string): string {
+  const digits = waId.replace(/\D/g, '');
+  if (digits.startsWith('55') && digits.length === 13 && digits[4] === '9') {
+    return digits.slice(0, 4) + digits.slice(5);
+  }
+  return digits;
+}

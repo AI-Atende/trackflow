@@ -12,10 +12,11 @@ import { processLeadStageChange } from '@/lib/leadJourney';
 // (SKIPPED, never revisited) and left the lead without attribution. Now a miss keeps the message
 // PENDING and tries again with backoff until the lead shows up or attempts run out.
 
-// Wait before attempt N+1, indexed by how many attempts were already made. 8 attempts total
-// (the inline one + 7 retries) spanning about an hour — a lead that still doesn't exist by then
-// is not coming from this message.
-const RETRY_DELAYS_MS = [30_000, 60_000, 120_000, 300_000, 600_000, 900_000, 1_800_000];
+// Wait before attempt N+1, indexed by how many attempts were already made. The lead usually
+// shows up within seconds of the message (the messaging platform creates it right after), so the
+// first retries are short; later ones back off. 10 attempts (the inline one + 9 retries) spanning
+// about 35 minutes — a lead that still doesn't exist by then is not coming from this message.
+const RETRY_DELAYS_MS = [5_000, 10_000, 20_000, 30_000, 60_000, 120_000, 300_000, 600_000, 900_000];
 const MAX_ATTEMPTS = RETRY_DELAYS_MS.length + 1;
 // Rows older than this are never auto-retried (also bounds how far back stuck PENDING rows from
 // before this feature are picked up).
