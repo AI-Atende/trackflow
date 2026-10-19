@@ -1,8 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import QRCode from 'qrcode';
-import { Plus, Trash2, Copy, QrCode, Download, X, ExternalLink } from 'lucide-react';
+import { Plus, Trash2, Copy, QrCode, Download, X, ExternalLink, Pencil, Save } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Select } from '@/components/ui/Select';
 import { useToast } from '@/contexts/ToastContext';
@@ -83,6 +83,7 @@ export function RedirectLinksSection({
   onChanged: () => Promise<void> | void;
 }) {
   const { showToast } = useToast();
+  const formRef = useRef<HTMLDivElement>(null);
 
   const [label, setLabel] = useState('');
   const [slug, setSlug] = useState('');
@@ -97,13 +98,15 @@ export function RedirectLinksSection({
   const [utmCampaign, setUtmCampaign] = useState('');
   const [utmContent, setUtmContent] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+  // Set while the form is editing an existing link instead of creating a new one.
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   const [qrLink, setQrLink] = useState<RedirectLinkRow | null>(null);
   const [qrPng, setQrPng] = useState<string | null>(null);
 
   const handleLabelChange = (value: string) => {
     setLabel(value);
-    if (!slugTouched) setSlug(slugify(value));
+    if (!slugTouched && !editingId) setSlug(slugify(value));
   };
 
   const handleNumberChoice = (choice: string) => {
@@ -117,48 +120,79 @@ export function RedirectLinksSection({
     setWaNumber(selected ? selected.displayNumber.replace(/\D/g, '') : '');
   };
 
-  const createLink = async () => {
+  const resetForm = () => {
+    setEditingId(null);
+    setLabel('');
+    setSlug('');
+    setSlugTouched(false);
+    setNumberChoice(OTHER_NUMBER);
+    setWaNumber('');
+    setMessageTemplate('Olá! Quero saber mais.');
+    setCodingStrategy('VISIBLE_CODE');
+    setTimeWindowFallback(false);
+    setUtmSource('');
+    setUtmMedium('');
+    setUtmCampaign('');
+    setUtmContent('');
+  };
+
+  const startEdit = (link: RedirectLinkRow) => {
+    setEditingId(link.id);
+    setLabel(link.label);
+    setSlug(link.slug ?? '');
+    setSlugTouched(true);
+    const registered = registeredNumbers.find(
+      (n) => n.displayNumber.replace(/\D/g, '') === link.waNumber,
+    );
+    setNumberChoice(registered ? registered.phoneNumberId : OTHER_NUMBER);
+    setWaNumber(link.waNumber);
+    setMessageTemplate(link.messageTemplate);
+    setCodingStrategy(link.codingStrategy);
+    setTimeWindowFallback(link.timeWindowFallback);
+    setUtmSource(link.utmSource ?? '');
+    setUtmMedium(link.utmMedium ?? '');
+    setUtmCampaign(link.utmCampaign ?? '');
+    setUtmContent(link.utmContent ?? '');
+    formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
+  const saveLink = async () => {
     if (!label.trim() || !slug.trim() || !waNumber.trim() || !messageTemplate.trim()) {
       showToast('Preencha nome, endereço, número e mensagem.', 'error');
       return;
     }
+    const isEditing = editingId !== null;
     setIsSaving(true);
     try {
-      const res = await fetch('/api/tracking-links', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          label,
-          slug,
-          waNumber,
-          messageTemplate,
-          codingStrategy,
-          timeWindowFallback: codingStrategy !== 'TIME_WINDOW' && timeWindowFallback,
-          utmSource,
-          utmMedium,
-          utmCampaign,
-          utmContent,
-        }),
-      });
+      // The slug is deliberately not sent on edit — it can't change (it's baked into printed QR
+      // codes), and the API rejects a different one.
+      const res = await fetch(
+        isEditing ? `/api/tracking-links/${editingId}` : '/api/tracking-links',
+        {
+          method: isEditing ? 'PATCH' : 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            label,
+            ...(isEditing ? {} : { slug }),
+            waNumber,
+            messageTemplate,
+            codingStrategy,
+            timeWindowFallback: codingStrategy !== 'TIME_WINDOW' && timeWindowFallback,
+            utmSource,
+            utmMedium,
+            utmCampaign,
+            utmContent,
+          }),
+        },
+      );
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error || 'Falha ao criar o link');
+      if (!res.ok) throw new Error(data.error || 'Falha ao salvar o link');
 
-      setLabel('');
-      setSlug('');
-      setSlugTouched(false);
-      setNumberChoice(OTHER_NUMBER);
-      setWaNumber('');
-      setMessageTemplate('Olá! Quero saber mais.');
-      setCodingStrategy('VISIBLE_CODE');
-      setTimeWindowFallback(false);
-      setUtmSource('');
-      setUtmMedium('');
-      setUtmCampaign('');
-      setUtmContent('');
+      resetForm();
       await onChanged();
-      showToast('Link criado!', 'success');
+      showToast(isEditing ? 'Link atualizado!' : 'Link criado!', 'success');
     } catch (err) {
-      showToast(err instanceof Error ? err.message : 'Erro ao criar o link', 'error');
+      showToast(err instanceof Error ? err.message : 'Erro ao salvar o link', 'error');
     } finally {
       setIsSaving(false);
     }
@@ -173,6 +207,7 @@ export function RedirectLinksSection({
       return;
     }
     await fetch(`/api/tracking-links/${link.id}`, { method: 'DELETE' });
+    if (editingId === link.id) resetForm();
     await onChanged();
   };
 
@@ -212,7 +247,13 @@ export function RedirectLinksSection({
         do pixel no site.
       </p>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+      <div ref={formRef} className="grid grid-cols-1 md:grid-cols-2 gap-3 scroll-mt-4">
+        {editingId && (
+          <p className="md:col-span-2 text-sm bg-brand-500/10 border border-brand-500/40 rounded-lg px-3 py-2">
+            Editando um link existente. As mudanças valem a partir do próximo clique; visitas já
+            registradas mantêm a origem (UTMs) que tinham. O QR code continua o mesmo.
+          </p>
+        )}
         <input
           className={inputClass}
           placeholder="Nome (ex: Panfleto Centro)"
@@ -224,13 +265,16 @@ export function RedirectLinksSection({
             className={`${inputClass} w-full font-mono text-sm`}
             placeholder="endereco-do-link (ex: panfleto-centro)"
             value={slug}
+            disabled={editingId !== null}
             onChange={(e) => {
               setSlugTouched(true);
               setSlug(slugify(e.target.value));
             }}
           />
           <p className="text-xs text-muted-foreground">
-            Só letras minúsculas, números e hífen. Não pode repetir entre os seus links.
+            {editingId
+              ? 'O endereço não pode ser alterado: QR codes já impressos deixariam de funcionar.'
+              : 'Só letras minúsculas, números e hífen. Não pode repetir entre os seus links.'}
           </p>
         </div>
 
@@ -325,9 +369,24 @@ export function RedirectLinksSection({
           </div>
         </div>
 
-        <Button onClick={createLink} disabled={isSaving} className="md:col-span-2">
-          <Plus size={16} className="mr-2" /> Criar link
-        </Button>
+        <div className="md:col-span-2 flex gap-2">
+          <Button onClick={saveLink} disabled={isSaving} className="flex-1">
+            {editingId ? (
+              <>
+                <Save size={16} className="mr-2" /> Salvar alterações
+              </>
+            ) : (
+              <>
+                <Plus size={16} className="mr-2" /> Criar link
+              </>
+            )}
+          </Button>
+          {editingId && (
+            <Button variant="outline" onClick={resetForm} disabled={isSaving}>
+              Cancelar
+            </Button>
+          )}
+        </div>
       </div>
 
       <div className="space-y-2 pt-4">
@@ -337,7 +396,12 @@ export function RedirectLinksSection({
           <p className="text-sm text-muted-foreground">Nenhum link criado ainda.</p>
         ) : (
           links.map((link) => (
-            <div key={link.id} className="border border-border rounded-lg p-3 space-y-2">
+            <div
+              key={link.id}
+              className={`border rounded-lg p-3 space-y-2 ${
+                editingId === link.id ? 'border-brand-500' : 'border-border'
+              }`}
+            >
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <p className="font-medium text-sm">{link.label}</p>
@@ -377,6 +441,14 @@ export function RedirectLinksSection({
                   </a>
                   <Button variant="outline" size="icon" onClick={() => openQr(link)}>
                     <QrCode size={16} />
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    title="Editar"
+                    onClick={() => startEdit(link)}
+                  >
+                    <Pencil size={16} />
                   </Button>
                   <Button variant="ghost" size="icon" onClick={() => deleteLink(link)}>
                     <Trash2 size={16} className="text-destructive" />
