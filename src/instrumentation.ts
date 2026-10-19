@@ -5,6 +5,7 @@ export async function register() {
   const { runAdCatalogSyncJob } = await import('./lib/jobs/adCatalogSyncJob');
   const { runConversionEventRetryJob } = await import('./lib/jobs/conversionEventRetryJob');
   const { runRedirectSessionCleanupJob } = await import('./lib/jobs/redirectSessionCleanupJob');
+  const { runKommoSyncRetryJob } = await import('./lib/jobs/kommoSyncRetryJob');
 
   // No webhook exists on Meta or Google for "campaign/adset/ad structure changed" — this is
   // poll-based by design. Every 6h balances freshness against API rate limits; the manual
@@ -20,12 +21,19 @@ export async function register() {
     runConversionEventRetryJob().catch(console.error);
   });
 
+  // Re-attempts writing attribution to Kommo for messages whose lead didn't exist yet when they
+  // arrived (the messaging platform creates it asynchronously). Backoff lives in the job itself;
+  // this just ticks every minute.
+  cron.schedule('* * * * *', () => {
+    runKommoSyncRetryJob().catch(console.error);
+  });
+
   // Drops redirect-link visits that never became a message (see the job for the retention rule).
   cron.schedule('30 3 * * *', () => {
     runRedirectSessionCleanupJob().catch(console.error);
   });
 
   console.log(
-    '[instrumentation] Cron jobs registered (ad catalog sync: every 6h, conversion event retry: every 15min, redirect visit cleanup: daily)',
+    '[instrumentation] Cron jobs registered (ad catalog sync: every 6h, conversion event retry: every 15min, Kommo sync retry: every 1min, redirect visit cleanup: daily)',
   );
 }

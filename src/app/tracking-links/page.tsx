@@ -13,8 +13,8 @@ import { RedirectLinksSection, type RedirectLinkRow } from '@/components/Redirec
 type TrackingLink = RedirectLinkRow & { createdAt: string };
 
 const STRATEGY_OPTIONS = [
-  { value: 'INVISIBLE', label: 'Caracteres invisíveis (padrão)' },
-  { value: 'VISIBLE_CODE', label: 'Código curto visível' },
+  { value: 'INVISIBLE', label: 'Caracteres invisíveis (pode ser removido pelo WhatsApp)' },
+  { value: 'VISIBLE_CODE', label: 'Código curto visível (recomendado)' },
   { value: 'TIME_WINDOW', label: 'Só por janela de tempo (sem código)' },
 ];
 
@@ -59,7 +59,8 @@ export default function TrackingLinksPage() {
   const [numberChoice, setNumberChoice] = useState(OTHER_NUMBER);
   const [registeredNumbers, setRegisteredNumbers] = useState<WhatsAppNumber[]>([]);
   const [messageTemplate, setMessageTemplate] = useState('Olá! Quero saber mais.');
-  const [codingStrategy, setCodingStrategy] = useState<TrackingLink['codingStrategy']>('INVISIBLE');
+  const [codingStrategy, setCodingStrategy] =
+    useState<TrackingLink['codingStrategy']>('VISIBLE_CODE');
   const [isSaving, setIsSaving] = useState(false);
 
   const [fieldMapping, setFieldMapping] = useState<Record<string, number | null>>({});
@@ -165,7 +166,7 @@ export default function TrackingLinksPage() {
       setWaNumber('');
       setNumberChoice(OTHER_NUMBER);
       setMessageTemplate('Olá! Quero saber mais.');
-      setCodingStrategy('INVISIBLE');
+      setCodingStrategy('VISIBLE_CODE');
       await fetchLinks();
       showToast('Link de rastreamento criado!', 'success');
     } catch {

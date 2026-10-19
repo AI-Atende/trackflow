@@ -249,6 +249,7 @@ export default function LeadsPage() {
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [isBulkDeleting, setIsBulkDeleting] = useState(false);
+  const [resyncingMessageId, setResyncingMessageId] = useState<string | null>(null);
 
   const fetchLeads = useCallback(async () => {
     setIsLoading(true);
@@ -375,6 +376,39 @@ export default function LeadsPage() {
       showToast(err instanceof Error ? err.message : 'Erro ao excluir o lead', 'error');
     } finally {
       setIsDeletingLead(false);
+    }
+  };
+
+  const resyncMessage = async (messageId: string) => {
+    setResyncingMessageId(messageId);
+    try {
+      const res = await fetch(`/api/tracked-messages/${messageId}/resync`, { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Falha ao reenviar ao Kommo');
+      setTrackedMessages((prev) =>
+        prev.map((m) =>
+          m.id === messageId
+            ? {
+                ...m,
+                kommoSyncStatus: data.status,
+                kommoSyncError: data.error,
+                kommoLeadId: data.kommoLeadId ?? m.kommoLeadId,
+              }
+            : m,
+        ),
+      );
+      showToast(
+        data.status === 'SYNCED'
+          ? 'Origem gravada no lead do Kommo.'
+          : data.status === 'PENDING'
+            ? 'Lead ainda não encontrado no Kommo — o sistema vai tentar de novo sozinho.'
+            : (data.error ?? 'Não foi possível gravar no Kommo.'),
+        data.status === 'SYNCED' ? 'success' : 'error',
+      );
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Erro ao reenviar ao Kommo', 'error');
+    } finally {
+      setResyncingMessageId(null);
     }
   };
 
@@ -971,6 +1005,23 @@ export default function LeadsPage() {
                                   >
                                     Sincronização Kommo: {msg.kommoSyncStatus}
                                   </p>
+                                  {msg.kommoSyncStatus !== 'SYNCED' && msg.kommoSyncError && (
+                                    <p className="text-[11px] text-amber-600 dark:text-amber-400">
+                                      {msg.kommoSyncError}
+                                    </p>
+                                  )}
+                                  {msg.matchStrategy !== 'UNMATCHED' &&
+                                    msg.kommoSyncStatus !== 'SYNCED' && (
+                                      <button
+                                        onClick={() => resyncMessage(msg.id)}
+                                        disabled={resyncingMessageId === msg.id}
+                                        className="text-[11px] font-medium text-brand-500 hover:underline disabled:opacity-50"
+                                      >
+                                        {resyncingMessageId === msg.id
+                                          ? 'Reenviando...'
+                                          : 'Reenviar ao Kommo'}
+                                      </button>
+                                    )}
                                 </div>
                               );
                             })}

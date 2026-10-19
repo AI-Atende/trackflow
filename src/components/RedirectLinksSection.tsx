@@ -35,11 +35,11 @@ type Strategy = RedirectLinkRow['codingStrategy'];
 
 const STRATEGY_INFO: Record<Strategy, { label: string; risk: string }> = {
   INVISIBLE: {
-    label: 'Caracteres invisíveis',
-    risk: 'O código vai escondido no texto da mensagem — discreto, mas se a pessoa apagar ou editar a mensagem antes de enviar, a atribuição se perde. Alguns teclados e aparelhos também removem caracteres invisíveis.',
+    label: 'Caracteres invisíveis (não recomendado)',
+    risk: 'O código vai escondido no texto da mensagem, mas em testes reais o WhatsApp entregou a mensagem sem ele — a atribuição se perde mesmo sem a pessoa editar nada. Se a pessoa apagar ou editar o texto, também se perde. Prefira o código visível.',
   },
   VISIBLE_CODE: {
-    label: 'Código curto visível',
+    label: 'Código curto visível (recomendado)',
     risk: 'Adiciona "— ref: abc123" ao fim da mensagem. Sobrevive melhor do que o invisível, mas a pessoa enxerga o código e pode apagá-lo antes de enviar.',
   },
   TIME_WINDOW: {

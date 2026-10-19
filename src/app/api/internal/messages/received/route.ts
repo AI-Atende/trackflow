@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { getKommoClient } from '@/lib/kommo-auth';
+import { syncTrackedMessageToKommo } from '@/lib/kommoAttribution';
 import { extractInvisibleCode, extractVisibleCode } from '@/lib/tracking-codes';
 
 const TIME_WINDOW_MINUTES = 30;
@@ -9,6 +9,12 @@ type MatchStrategy = 'CODE_INVISIBLE' | 'CODE_VISIBLE' | 'TIME_WINDOW' | 'AD_COD
 
 type PixelSessionRow = Awaited<ReturnType<typeof prisma.pixelSession.findFirst>>;
 type MappedAdRow = Awaited<ReturnType<typeof prisma.mappedAd.findFirst>>;
+
+// E.164 phone numbers have at most 15 digits. WhatsApp group ids ("1203634...@g.us") are 18 —
+// they are conversations, not leads, and must never take part in attribution: a group message
+// arriving right after a redirect-link visit would otherwise be matched to it by the TIME_WINDOW
+// fallback and consume that visitor's session.
+const MAX_PHONE_DIGITS = 15;
 
 // POST /api/internal/messages/received — relayed by the portal (app/api/webhooks/messaging/
 // [clientId] there) after it verifies the inbound WhatsApp message's signature. Auth: shared
@@ -28,6 +34,10 @@ export async function POST(req: NextRequest) {
       { error: 'portalClientId, waId e text são obrigatórios' },
       { status: 400 },
     );
+  }
+
+  if (String(waId).replace(/\D/g, '').length > MAX_PHONE_DIGITS) {
+    return NextResponse.json({ success: true, skipped: 'group conversation' });
   }
 
   const client = await prisma.client.findUnique({ where: { portalClientId } });
@@ -67,22 +77,7 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    try {
-      await syncToKommo(
-        client.id,
-        waId,
-        { session: matchedSession, mappedAd: matchedMappedAd },
-        trackedMessage.id,
-      );
-    } catch (err) {
-      await prisma.trackedMessage.update({
-        where: { id: trackedMessage.id },
-        data: {
-          kommoSyncStatus: 'FAILED',
-          kommoSyncError: err instanceof Error ? err.message : String(err),
-        },
-      });
-    }
+    await syncTrackedMessageToKommo(trackedMessage.id);
   }
 
   return NextResponse.json({ success: true, matchStrategy, trackedMessageId: trackedMessage.id });
@@ -155,190 +150,4 @@ async function matchIncomingMessage(
   }
 
   return { matchStrategy: 'UNMATCHED', matchedSession: null, matchedMappedAd: null };
-}
-
-interface ResolvedAdMatch {
-  confidence: 'id' | 'name' | null;
-  adExternalId: string | null;
-  campaignExternalId: string | null;
-  adsetExternalId: string | null;
-}
-
-// Resolves the session's captured UTM values against the MappedAd catalog (see adCatalogSync.ts),
-// preferring the platform's dynamic ID tokens ({{ad.id}}/{{campaign.id}} etc, landing in
-// utmContent/utmCampaign) over legacy ads that only ever carried human-readable names — see plan
-// doc "TrackFlow — resolução por ID com fallback por nome".
-async function resolveAdMatch(
-  clientId: string,
-  session: { utmContent: string | null; utmCampaign: string | null },
-): Promise<ResolvedAdMatch> {
-  if (session.utmContent) {
-    const byAdId = await prisma.mappedAd.findFirst({
-      where: { clientId, adExternalId: session.utmContent },
-    });
-    if (byAdId) {
-      return {
-        confidence: 'id',
-        adExternalId: byAdId.adExternalId,
-        campaignExternalId: byAdId.campaignExternalId,
-        adsetExternalId: byAdId.adsetExternalId,
-      };
-    }
-  }
-
-  if (session.utmCampaign) {
-    const byCampaignId = await prisma.mappedAd.findFirst({
-      where: { clientId, campaignExternalId: session.utmCampaign },
-    });
-    if (byCampaignId) {
-      return {
-        confidence: 'id',
-        adExternalId: null,
-        campaignExternalId: byCampaignId.campaignExternalId,
-        adsetExternalId: null,
-      };
-    }
-  }
-
-  if (session.utmContent) {
-    const byAdName = await prisma.mappedAd.findFirst({
-      where: { clientId, adName: session.utmContent },
-    });
-    if (byAdName) {
-      return {
-        confidence: 'name',
-        adExternalId: byAdName.adExternalId,
-        campaignExternalId: byAdName.campaignExternalId,
-        adsetExternalId: byAdName.adsetExternalId,
-      };
-    }
-  }
-
-  if (session.utmCampaign) {
-    const byCampaignName = await prisma.mappedAd.findFirst({
-      where: { clientId, campaignName: session.utmCampaign },
-    });
-    if (byCampaignName) {
-      return {
-        confidence: 'name',
-        adExternalId: null,
-        campaignExternalId: byCampaignName.campaignExternalId,
-        adsetExternalId: null,
-      };
-    }
-  }
-
-  return { confidence: null, adExternalId: null, campaignExternalId: null, adsetExternalId: null };
-}
-
-async function syncToKommo(
-  clientId: string,
-  waId: string,
-  matched: { session: PixelSessionRow | null; mappedAd: MappedAdRow | null },
-  trackedMessageId: string,
-): Promise<void> {
-  const [client, integrationConfig, fieldMapping, adMatch] = await Promise.all([
-    prisma.client.findUnique({ where: { id: clientId } }),
-    prisma.integrationConfig.findFirst({ where: { clientId, provider: 'KOMMO' } }),
-    prisma.kommoFieldMapping.findUnique({ where: { clientId } }),
-    // AD_CODE match already IS the ad, at full confidence — no UTM guessing needed. A
-    // PixelSession match still goes through resolveAdMatch's UTM-based lookup, same as before.
-    matched.mappedAd
-      ? Promise.resolve<ResolvedAdMatch>({
-          confidence: 'id',
-          adExternalId: matched.mappedAd.adExternalId,
-          campaignExternalId: matched.mappedAd.campaignExternalId,
-          adsetExternalId: matched.mappedAd.adsetExternalId,
-        })
-      : matched.session
-        ? resolveAdMatch(clientId, matched.session)
-        : Promise.resolve<ResolvedAdMatch>({
-            confidence: null,
-            adExternalId: null,
-            campaignExternalId: null,
-            adsetExternalId: null,
-          }),
-  ]);
-
-  const subdomain = (integrationConfig?.config as { subdomain?: string } | null)?.subdomain;
-  if (!client?.portalClientId || !subdomain || !fieldMapping) {
-    await prisma.trackedMessage.update({
-      where: { id: trackedMessageId },
-      data: {
-        kommoSyncStatus: 'SKIPPED',
-        kommoSyncError: 'Kommo não configurado ou campos não mapeados',
-        resolvedAdMatchConfidence: adMatch.confidence,
-      },
-    });
-    return;
-  }
-
-  const kommo = await getKommoClient(subdomain, client.portalClientId);
-
-  const found = await kommo.leads.list({ query: waId, limit: 1 });
-  const lead = found._embedded?.leads?.[0];
-  if (!lead) {
-    await prisma.trackedMessage.update({
-      where: { id: trackedMessageId },
-      data: {
-        kommoSyncStatus: 'SKIPPED',
-        kommoSyncError: `Nenhum lead encontrado no Kommo para ${waId}`,
-        resolvedAdMatchConfidence: adMatch.confidence,
-      },
-    });
-    return;
-  }
-
-  const fieldValue = (fieldId: number | null, value: string | null) =>
-    fieldId && value ? { field_id: fieldId, values: [{ value }] } : null;
-
-  const customFieldsValues = [
-    // UTM/click-id fields only exist for a site-visit (PixelSession) match — a CTWA AD_CODE
-    // match has no UTMs at all, just the ad identity itself.
-    ...(matched.session
-      ? [
-          fieldValue(fieldMapping.utmSourceFieldId, matched.session.utmSource),
-          fieldValue(fieldMapping.utmMediumFieldId, matched.session.utmMedium),
-          fieldValue(fieldMapping.utmCampaignFieldId, matched.session.utmCampaign),
-          fieldValue(fieldMapping.utmContentFieldId, matched.session.utmContent),
-          fieldValue(fieldMapping.utmTermFieldId, matched.session.utmTerm),
-          fieldValue(fieldMapping.fbclidFieldId, matched.session.fbclid),
-          fieldValue(fieldMapping.gclidFieldId, matched.session.gclid),
-          fieldValue(fieldMapping.gbraidFieldId, matched.session.gbraid),
-          fieldValue(fieldMapping.wbraidFieldId, matched.session.wbraid),
-        ]
-      : []),
-    // Resolved-by-catalog IDs — written alongside (not instead of) the raw UTM text above, so
-    // the client can see both what was captured and what it resolved to.
-    fieldValue(fieldMapping.campaignIdFieldId, adMatch.campaignExternalId),
-    fieldValue(fieldMapping.adsetIdFieldId, adMatch.adsetExternalId),
-    fieldValue(fieldMapping.adIdFieldId, adMatch.adExternalId),
-  ].filter((v): v is NonNullable<typeof v> => v !== null);
-
-  if (customFieldsValues.length === 0) {
-    // Lead found, but nothing was actually resolved to write — no API call happened. Marking
-    // this SYNCED (as before) was misleading: it looked like a successful write when it wasn't.
-    await prisma.trackedMessage.update({
-      where: { id: trackedMessageId },
-      data: {
-        kommoLeadId: String(lead.id),
-        kommoSyncStatus: 'SKIPPED',
-        kommoSyncError: 'Lead encontrado, mas nada foi resolvido pra gravar',
-        resolvedAdMatchConfidence: adMatch.confidence,
-      },
-    });
-    return;
-  }
-
-  await kommo.leads.updateOne(lead.id, { custom_fields_values: customFieldsValues });
-
-  await prisma.trackedMessage.update({
-    where: { id: trackedMessageId },
-    data: {
-      kommoLeadId: String(lead.id),
-      kommoSyncStatus: 'SYNCED',
-      kommoSyncedAt: new Date(),
-      resolvedAdMatchConfidence: adMatch.confidence,
-    },
-  });
 }

@@ -6,7 +6,7 @@ import { sendMetaConversionEvent } from '@/lib/meta/capi';
 import { uploadGoogleConversion } from '@/lib/google/conversionUpload';
 import { brPhoneVariants } from '@/lib/phone';
 
-export type StageChangeSource = 'webhook' | 'manual' | 'api';
+export type StageChangeSource = 'webhook' | 'manual' | 'api' | 'sync';
 
 interface ProcessStageChangeInput {
   clientId: string;

@@ -401,6 +401,11 @@ model TrackedMessage {
   kommoSyncStatus KommoSyncStatus @default(PENDING)
   kommoSyncedAt   DateTime?
   kommoSyncError  String?
+  // The Kommo lead often doesn't exist yet when the message arrives (the messaging platform
+  // creates it asynchronously), so the write is retried with backoff while status stays PENDING
+  // — see lib/kommoAttribution.ts. Attempts counts every try, inline and retries.
+  kommoSyncAttempts   Int       @default(0)
+  kommoLastAttemptAt  DateTime?
 
   // How the resolved MappedAd (if any) was found — "id" (reliable, dynamic UTM token) vs "name"
   // (fallback match against MappedAd.name, lower confidence) vs null (no ad-catalog match at
@@ -413,6 +418,7 @@ model TrackedMessage {
   @@index([waId])
   @@index([receivedAt])
   @@index([matchedPixelSessionId])
+  @@index([kommoSyncStatus, createdAt])
 }
 
 // Per-client mapping of UTM/click-id fields to that client's Kommo custom-field IDs (IDs are

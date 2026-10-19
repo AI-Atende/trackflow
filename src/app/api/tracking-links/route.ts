@@ -81,7 +81,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const strategy: CodingStrategyValue = codingStrategy ?? 'INVISIBLE';
+  const strategy: CodingStrategyValue = codingStrategy ?? 'VISIBLE_CODE';
   if (!CODING_STRATEGIES.includes(strategy)) {
     return NextResponse.json({ error: 'codingStrategy inválida' }, { status: 400 });
   }
