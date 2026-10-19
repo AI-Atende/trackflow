@@ -1010,18 +1010,21 @@ export default function LeadsPage() {
                                       {msg.kommoSyncError}
                                     </p>
                                   )}
-                                  {msg.matchStrategy !== 'UNMATCHED' &&
-                                    msg.kommoSyncStatus !== 'SYNCED' && (
-                                      <button
-                                        onClick={() => resyncMessage(msg.id)}
-                                        disabled={resyncingMessageId === msg.id}
-                                        className="text-[11px] font-medium text-brand-500 hover:underline disabled:opacity-50"
-                                      >
-                                        {resyncingMessageId === msg.id
-                                          ? 'Reenviando...'
-                                          : 'Reenviar ao Kommo'}
-                                      </button>
-                                    )}
+                                  {isMatched && (
+                                    // Also offered when SYNCED: that status only means Kommo
+                                    // accepted the write on *some* lead — if it turns out to be
+                                    // the wrong one (e.g. an older lead for the same number),
+                                    // re-sending re-targets the right one.
+                                    <button
+                                      onClick={() => resyncMessage(msg.id)}
+                                      disabled={resyncingMessageId === msg.id}
+                                      className="text-[11px] font-medium text-brand-500 hover:underline disabled:opacity-50"
+                                    >
+                                      {resyncingMessageId === msg.id
+                                        ? 'Reenviando...'
+                                        : 'Reenviar ao Kommo'}
+                                    </button>
+                                  )}
                                 </div>
                               );
                             })}

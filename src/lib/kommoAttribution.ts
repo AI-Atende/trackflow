@@ -106,15 +106,32 @@ const EMPTY_AD_MATCH: ResolvedAdMatch = {
 
 type KommoLeadSummary = { id: number; status_id?: number | null; pipeline_id?: number | null };
 
-/** First Kommo lead found for the number, trying the Brazilian with/without-9 variants too. */
+// Kommo's fixed system statuses for closed leads: 142 = won, 143 = lost.
+const CLOSED_STATUS_IDS = new Set([142, 143]);
+
+/**
+ * The open Kommo lead this message belongs to, trying the Brazilian with/without-9 variants too.
+ * A phone number can have several leads (earlier conversations, test runs, a closed deal), and
+ * Kommo's text search has no useful default order — the old `limit: 1` could land on an old one,
+ * so the attribution got written ("SYNCED") onto a lead nobody was looking at. Fetch a handful,
+ * newest first, and take the newest one that is still open.
+ *
+ * Closed leads are deliberately never a fallback: when the contact's real (new) lead simply
+ * doesn't exist yet — the usual race, the messaging platform creates it a moment after the
+ * message arrives — an old closed lead is the only thing the search finds, and writing the
+ * attribution there would be wrong. Returning null makes the caller retry until the new lead
+ * shows up.
+ */
 async function findKommoLead(
   kommo: Awaited<ReturnType<typeof getKommoClient>>,
   waId: string,
 ): Promise<KommoLeadSummary | null> {
   for (const variant of brPhoneVariants(waId)) {
-    const found = await kommo.leads.list({ query: variant, limit: 1 });
-    const lead = found._embedded?.leads?.[0];
-    if (lead) return lead;
+    const found = await kommo.leads.list({ query: variant, limit: 10, order_created_at: 'desc' });
+    const open = (found._embedded?.leads ?? []).find(
+      (l) => !CLOSED_STATUS_IDS.has(l.status_id ?? 0),
+    );
+    if (open) return open;
   }
   return null;
 }
@@ -249,7 +266,34 @@ export async function syncTrackedMessageToKommo(trackedMessageId: string): Promi
       });
     }
 
-    await kommo.leads.updateOne(lead.id, { custom_fields_values: customFieldsValues });
+    const updated = await kommo.leads.updateOne(lead.id, {
+      custom_fields_values: customFieldsValues,
+    });
+
+    // "Kommo answered without an error" is not the same as "the fields were filled": a field id
+    // that doesn't apply to leads can be accepted and silently dropped. PATCH /leads/{id} echoes
+    // the lead back, so check each field we wrote actually came back with a value — if not, fail
+    // loudly (and retry) instead of reporting SYNCED over an empty lead. Only checks presence of
+    // the field, not the exact value, since Kommo may normalise what it stores.
+    const echoed = (updated as { custom_fields_values?: unknown }).custom_fields_values;
+    if (Array.isArray(echoed)) {
+      const filled = new Set(
+        (echoed as Array<{ field_id?: number; values?: unknown[] }>)
+          .filter((f) => Array.isArray(f.values) && f.values.length > 0)
+          .map((f) => f.field_id),
+      );
+      const missing = customFieldsValues.filter((f) => !filled.has(f.field_id));
+      if (missing.length > 0) {
+        throw new Error(
+          `Kommo aceitou a gravação no lead ${lead.id}, mas não preencheu os campos ${missing
+            .map((f) => f.field_id)
+            .join(', ')} — confira se eles são campos de LEAD no mapeamento`,
+        );
+      }
+    }
+    console.log(
+      `[kommoAttribution] wrote ${customFieldsValues.length} field(s) to Kommo lead ${lead.id} (message ${message.id})`,
+    );
 
     // Mirror the lead into TrackFlow right now instead of waiting for Kommo's status_lead
     // webhook: that one only fires when a lead *changes* stage, not when it's created, so a
