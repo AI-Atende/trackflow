@@ -25,6 +25,11 @@ model Client {
   portalClientId String?             @unique // aiatende-portal Client.id — set for accounts provisioned via SSO
   ssoProvisioned Boolean             @default(false) // skips the phone/birthDate/address/consent profile-completion gate
 
+  // Short public namespace for redirect-link URLs (/r/{shortKey}/{slug}) — lets two clients use
+  // the same slug without colliding, without exposing the long internal cuid in a printed QR code.
+  // Generated lazily the first time the client creates a redirect link.
+  shortKey       String?             @unique
+
   // Profile Fields
   fullName       String?
   phone          String?
@@ -291,6 +296,7 @@ model PixelSession {
 
   @@index([clientId])
   @@index([createdAt])
+  @@index([lastTrackingLinkId])
 }
 
 enum CodingStrategy {
@@ -312,12 +318,33 @@ model TrackingLink {
   messageTemplate String
   codingStrategy  CodingStrategy @default(INVISIBLE)
 
+  // Redirect link (link/QR code with no site pixel involved): when slug is set, this row is
+  // also served publicly at /r/{client.shortKey}/{slug}, which creates a PixelSession on each
+  // visit and 302s to wa.me. Null for plain pixel-button links. Unique per client only, so two
+  // clients can both have /promo — Postgres treats NULLs as distinct, so pixel links don't clash.
+  slug String?
+
+  // Default origin tags applied to every visit through this link (e.g. utmSource "panfleto");
+  // UTM/click-id params present on the visited URL itself win over these field-by-field.
+  utmSource   String?
+  utmMedium   String?
+  utmCampaign String?
+  utmContent  String?
+  utmTerm     String?
+
+  // Redirect links only: also let the TIME_WINDOW heuristic ("any recent unmatched visit")
+  // claim a message that arrives without this link's code. Off by default — it can attribute a
+  // message to the wrong visitor when several people click close together. A link whose
+  // codingStrategy is TIME_WINDOW already opts into it by definition.
+  timeWindowFallback Boolean @default(false)
+
   pixelSessions   PixelSession[]
   trackedMessages TrackedMessage[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@unique([clientId, slug])
   @@index([clientId])
 }
 

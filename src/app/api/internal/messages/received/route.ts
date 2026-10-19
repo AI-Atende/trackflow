@@ -129,8 +129,25 @@ async function matchIncomingMessage(
   }
 
   const since = new Date(Date.now() - TIME_WINDOW_MINUTES * 60_000);
+  // Sessions created by a redirect link (slug set) only take part in this heuristic when the
+  // link's owner opted in — either by choosing the TIME_WINDOW strategy or the explicit fallback
+  // toggle. Everything else (pixel sessions, visitors who haven't clicked a button yet) keeps
+  // the original behavior.
   const fallback = await prisma.pixelSession.findFirst({
-    where: { clientId, matchedAt: null, createdAt: { gte: since } },
+    where: {
+      clientId,
+      matchedAt: null,
+      createdAt: { gte: since },
+      OR: [
+        { lastTrackingLinkId: null },
+        { lastTrackingLink: { is: { slug: null } } },
+        {
+          lastTrackingLink: {
+            is: { OR: [{ codingStrategy: 'TIME_WINDOW' }, { timeWindowFallback: true }] },
+          },
+        },
+      ],
+    },
     orderBy: { createdAt: 'desc' },
   });
   if (fallback) {

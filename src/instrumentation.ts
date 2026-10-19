@@ -4,6 +4,7 @@ export async function register() {
   const cron = (await import('node-cron')).default;
   const { runAdCatalogSyncJob } = await import('./lib/jobs/adCatalogSyncJob');
   const { runConversionEventRetryJob } = await import('./lib/jobs/conversionEventRetryJob');
+  const { runRedirectSessionCleanupJob } = await import('./lib/jobs/redirectSessionCleanupJob');
 
   // No webhook exists on Meta or Google for "campaign/adset/ad structure changed" — this is
   // poll-based by design. Every 6h balances freshness against API rate limits; the manual
@@ -19,7 +20,12 @@ export async function register() {
     runConversionEventRetryJob().catch(console.error);
   });
 
+  // Drops redirect-link visits that never became a message (see the job for the retention rule).
+  cron.schedule('30 3 * * *', () => {
+    runRedirectSessionCleanupJob().catch(console.error);
+  });
+
   console.log(
-    '[instrumentation] Cron jobs registered (ad catalog sync: every 6h, conversion event retry: every 15min)',
+    '[instrumentation] Cron jobs registered (ad catalog sync: every 6h, conversion event retry: every 15min, redirect visit cleanup: daily)',
   );
 }

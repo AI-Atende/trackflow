@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { embedInvisibleCode, embedVisibleCode } from '@/lib/tracking-codes';
+import { buildWaLink } from '@/lib/redirectLinks';
 import { withPixelCors, pixelCorsPreflight } from '@/lib/pixel-cors';
 
 // POST /api/public/pixel/wa-link — called by the pixel script right before a visitor clicks a
@@ -34,19 +34,11 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  let finalMessage = link.messageTemplate;
-  if (link.codingStrategy === 'INVISIBLE') {
-    finalMessage = embedInvisibleCode(link.messageTemplate, sessionCode);
-  } else if (link.codingStrategy === 'VISIBLE_CODE') {
-    finalMessage = embedVisibleCode(link.messageTemplate, sessionCode);
-  }
-  // TIME_WINDOW: message goes out unmodified — matching relies on receive-time correlation.
-
   await prisma.pixelSession.update({
     where: { id: session.id },
     data: { lastTrackingLinkId: link.id },
   });
 
-  const waLink = `https://wa.me/${link.waNumber}?text=${encodeURIComponent(finalMessage)}`;
+  const waLink = buildWaLink(link, sessionCode);
   return withPixelCors(NextResponse.json({ waLink }));
 }

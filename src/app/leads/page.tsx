@@ -17,6 +17,8 @@ import {
   Trash2,
   Eye,
   EyeOff,
+  CheckSquare,
+  Square,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { Sidebar } from '@/components/Sidebar';
@@ -244,6 +246,9 @@ export default function LeadsPage() {
   const [isLoadingTrackedMessages, setIsLoadingTrackedMessages] = useState(false);
   const [showAllTrackedMessages, setShowAllTrackedMessages] = useState(false);
   const [isDeletingLead, setIsDeletingLead] = useState(false);
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false);
 
   const fetchLeads = useCallback(async () => {
     setIsLoading(true);
@@ -373,6 +378,53 @@ export default function LeadsPage() {
     }
   };
 
+  const toggleSelected = (leadId: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(leadId)) next.delete(leadId);
+      else next.add(leadId);
+      return next;
+    });
+  };
+
+  const exitSelectionMode = () => {
+    setSelectionMode(false);
+    setSelectedIds(new Set());
+  };
+
+  const bulkDeleteLeads = async () => {
+    const ids = [...selectedIds];
+    if (ids.length === 0) return;
+
+    const warning = `Excluir ${ids.length} lead(s) do TrackFlow? Isso apaga os leads, o histórico de eventos de conversão e as mensagens de rastreamento dos telefones deles aqui (o Kommo não é alterado). Não dá pra desfazer.`;
+    if (ids.length > 10) {
+      const typed = prompt(`${warning}\n\nDigite EXCLUIR para confirmar.`);
+      if (typed?.trim().toUpperCase() !== 'EXCLUIR') return;
+    } else if (!confirm(warning)) {
+      return;
+    }
+
+    setIsBulkDeleting(true);
+    try {
+      const res = await fetch('/api/leads/bulk-delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Falha ao excluir os leads');
+      showToast(`${data.deleted} lead(s) excluído(s).`, 'success');
+      const removed = new Set(ids);
+      setLeads((prev) => prev.filter((l) => !removed.has(l.id)));
+      setSelectedLead((prev) => (prev && removed.has(prev.id) ? null : prev));
+      exitSelectionMode();
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Erro ao excluir os leads', 'error');
+    } finally {
+      setIsBulkDeleting(false);
+    }
+  };
+
   const importLeads = async () => {
     setIsImporting(true);
     try {
@@ -475,10 +527,19 @@ export default function LeadsPage() {
             </button>
             <h1 className="text-xl font-bold text-foreground">Jornada dos Leads</h1>
           </div>
-          <Button onClick={importLeads} disabled={isImporting}>
-            <Download size={16} className="mr-2" />
-            {isImporting ? 'Importando...' : 'Importar leads do Kommo'}
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant={selectionMode ? 'secondary' : 'outline'}
+              onClick={() => (selectionMode ? exitSelectionMode() : setSelectionMode(true))}
+            >
+              <CheckSquare size={16} className="mr-2" />
+              {selectionMode ? 'Cancelar seleção' : 'Selecionar'}
+            </Button>
+            <Button onClick={importLeads} disabled={isImporting}>
+              <Download size={16} className="mr-2" />
+              {isImporting ? 'Importando...' : 'Importar leads do Kommo'}
+            </Button>
+          </div>
         </header>
 
         <div className="flex-1 overflow-y-auto p-6 md:p-8 space-y-6 bg-background">
@@ -536,6 +597,39 @@ export default function LeadsPage() {
               </p>
             )}
 
+            {selectionMode && (
+              <div className="flex flex-wrap items-center gap-2 bg-card border border-border rounded-lg p-3">
+                <span className="text-sm font-medium">{selectedIds.size} selecionado(s)</span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setSelectedIds(new Set(filteredLeads.map((l) => l.id)))}
+                  disabled={filteredLeads.length === 0}
+                >
+                  Selecionar {hasActiveFilters ? 'todos os filtrados' : 'todos'} (
+                  {filteredLeads.length})
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setSelectedIds(new Set())}
+                  disabled={selectedIds.size === 0}
+                >
+                  Limpar seleção
+                </Button>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  className="ml-auto"
+                  onClick={bulkDeleteLeads}
+                  disabled={selectedIds.size === 0 || isBulkDeleting}
+                >
+                  <Trash2 size={14} className="mr-1" />
+                  {isBulkDeleting ? 'Excluindo...' : `Excluir selecionados (${selectedIds.size})`}
+                </Button>
+              </div>
+            )}
+
             {isLoading ? (
               <p className="text-sm text-muted-foreground">Carregando...</p>
             ) : stages.length === 0 ? (
@@ -583,13 +677,33 @@ export default function LeadsPage() {
                               return (
                                 <button
                                   key={lead.id}
-                                  onClick={() => setSelectedLead(lead)}
-                                  className="w-full text-left bg-secondary/30 hover:bg-secondary/50 border border-border rounded-lg p-2.5 space-y-1 transition-colors"
+                                  onClick={() =>
+                                    selectionMode ? toggleSelected(lead.id) : setSelectedLead(lead)
+                                  }
+                                  className={`w-full text-left hover:bg-secondary/50 border rounded-lg p-2.5 space-y-1 transition-colors ${
+                                    selectionMode && selectedIds.has(lead.id)
+                                      ? 'bg-brand-500/10 border-brand-500'
+                                      : 'bg-secondary/30 border-border'
+                                  }`}
                                 >
-                                  <p className="text-sm font-medium truncate">
-                                    {[lead.firstName, lead.lastName].filter(Boolean).join(' ') ||
-                                      lead.waId ||
-                                      'Lead sem nome'}
+                                  <p className="text-sm font-medium truncate flex items-center gap-1.5">
+                                    {selectionMode &&
+                                      (selectedIds.has(lead.id) ? (
+                                        <CheckSquare
+                                          size={14}
+                                          className="shrink-0 text-brand-500"
+                                        />
+                                      ) : (
+                                        <Square
+                                          size={14}
+                                          className="shrink-0 text-muted-foreground"
+                                        />
+                                      ))}
+                                    <span className="truncate">
+                                      {[lead.firstName, lead.lastName].filter(Boolean).join(' ') ||
+                                        lead.waId ||
+                                        'Lead sem nome'}
+                                    </span>
                                   </p>
                                   {lead.waId && (
                                     <p className="text-xs text-muted-foreground font-mono truncate">

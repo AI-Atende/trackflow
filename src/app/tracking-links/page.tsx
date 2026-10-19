@@ -8,15 +8,9 @@ import { Sidebar } from '@/components/Sidebar';
 import { Button } from '@/components/ui/Button';
 import { Select } from '@/components/ui/Select';
 import { useToast } from '@/contexts/ToastContext';
+import { RedirectLinksSection, type RedirectLinkRow } from '@/components/RedirectLinksSection';
 
-interface TrackingLink {
-  id: string;
-  label: string;
-  waNumber: string;
-  messageTemplate: string;
-  codingStrategy: 'INVISIBLE' | 'VISIBLE_CODE' | 'TIME_WINDOW';
-  createdAt: string;
-}
+type TrackingLink = RedirectLinkRow & { createdAt: string };
 
 const STRATEGY_OPTIONS = [
   { value: 'INVISIBLE', label: 'Caracteres invisíveis (padrão)' },
@@ -198,6 +192,10 @@ export default function TrackingLinksPage() {
     showToast('Trecho HTML copiado!', 'success');
   };
 
+  // Pixel-button links (no slug) are listed in section 2; redirect links (slug set) in section 3.
+  const pixelLinks = links.filter((l) => !l.slug);
+  const redirectLinks = links.filter((l) => l.slug);
+
   const pixelSnippet =
     session?.user?.clientId && origin
       ? `<script src="${origin}/api/public/pixel/script/${session.user.clientId}" async></script>`
@@ -316,10 +314,10 @@ export default function TrackingLinksPage() {
               <div className="space-y-2 pt-4">
                 {isLoading ? (
                   <p className="text-sm text-muted-foreground">Carregando...</p>
-                ) : links.length === 0 ? (
+                ) : pixelLinks.length === 0 ? (
                   <p className="text-sm text-muted-foreground">Nenhum link criado ainda.</p>
                 ) : (
-                  links.map((link) => (
+                  pixelLinks.map((link) => (
                     <div
                       key={link.id}
                       className="flex items-center justify-between border border-border rounded-lg p-3"
@@ -345,9 +343,17 @@ export default function TrackingLinksPage() {
               </div>
             </section>
 
+            {/* Redirect links + QR codes */}
+            <RedirectLinksSection
+              links={redirectLinks}
+              registeredNumbers={registeredNumbers}
+              isLoading={isLoading}
+              onChanged={fetchLinks}
+            />
+
             {/* Kommo field mapping */}
             <section className="bg-card border border-border rounded-xl p-6 space-y-4">
-              <h2 className="text-lg font-bold">3. Mapeie os campos do Kommo</h2>
+              <h2 className="text-lg font-bold">4. Mapeie os campos do Kommo</h2>
               <p className="text-sm text-muted-foreground">
                 Diga em qual campo personalizado do seu Kommo cada dado de rastreamento deve ser
                 gravado quando um lead for identificado.

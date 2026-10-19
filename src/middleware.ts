@@ -43,10 +43,11 @@ export const config = {
      * - auth/login (login page)
      * - auth/register (register page)
      * - api (API routes)
+     * - r/ (public redirect links — visited by anonymous people from a link/QR code)
      * - _next/static (static files)
      * - _next/image (image optimization files)
      * - favicon.ico (favicon file)
      */
-    '/((?!auth/login|auth/register|auth/sso|api|legal|_next/static|_next/image|favicon.ico).*)',
+    '/((?!auth/login|auth/register|auth/sso|api|legal|r/|_next/static|_next/image|favicon.ico).*)',
   ],
 };
