@@ -32,6 +32,8 @@ export async function GET(req: NextRequest) {
       waId: true,
       receivedAt: true,
       matchStrategy: true,
+      source: true,
+      channel: true,
       matchedPixelSessionId: true,
       matchedTrackingLink: { select: { label: true } },
       matchedMappedAd: { select: { adName: true, campaignName: true, platform: true } },
@@ -48,6 +50,7 @@ export async function GET(req: NextRequest) {
     firstSeenAt: Date;
     lastMessageAt: Date;
     messageCount: number;
+    vias: Map<string, { source: string; channel: string | null }>;
     attributed: Row | null; // newest message that matched something
   }
 
@@ -68,11 +71,13 @@ export async function GET(req: NextRequest) {
         firstSeenAt: m.receivedAt,
         lastMessageAt: m.receivedAt,
         messageCount: 0,
+        vias: new Map(),
         attributed: null,
       };
       groups.set(key, g);
     }
     g.messageCount++;
+    g.vias.set(`${m.source}|${m.channel ?? ''}`, { source: m.source, channel: m.channel });
     g.firstSeenAt = m.receivedAt;
     if (!g.attributed && m.matchStrategy !== 'UNMATCHED') g.attributed = m;
   }
@@ -117,6 +122,7 @@ export async function GET(req: NextRequest) {
       firstSeenAt: g.firstSeenAt,
       lastMessageAt: g.lastMessageAt,
       messageCount: g.messageCount,
+      vias: [...g.vias.values()],
       attribution: a
         ? {
             strategy: a.matchStrategy,

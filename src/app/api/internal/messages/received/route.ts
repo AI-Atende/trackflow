@@ -3,6 +3,8 @@ import { prisma } from '@/lib/prisma';
 import { syncTrackedMessageToKommo } from '@/lib/kommoAttribution';
 import { extractInvisibleCode, extractVisibleCode } from '@/lib/tracking-codes';
 import { brPhoneVariants } from '@/lib/phone';
+import { resolveKommoContactPhone } from '@/lib/kommoContacts';
+import { Prisma } from '@generated/prisma/client';
 
 const TIME_WINDOW_MINUTES = 30;
 // A number that already had a message attributed within this many days is a returning contact
@@ -19,12 +21,23 @@ type MappedAdRow = Awaited<ReturnType<typeof prisma.mappedAd.findFirst>>;
 // arriving right after a redirect-link visit would otherwise be matched to it by the TIME_WINDOW
 // fallback and consume that visitor's session.
 const MAX_PHONE_DIGITS = 15;
+// The same message can reach us through both pipelines for a client that has the portal's
+// messaging AND a Kommo-native WhatsApp. Same phone + same text from DIFFERENT sources within this
+// many seconds is treated as one message.
+const CROSS_SOURCE_DUPLICATE_SECONDS = 120;
 
 // POST /api/internal/messages/received — relayed by the portal (app/api/webhooks/messaging/
-// [clientId] there) after it verifies the inbound WhatsApp message's signature. Auth: shared
+// [clientId] there) after it verifies the inbound WhatsApp message's signature, or by the
+// Assistant (source "kommo") for clients whose WhatsApp is connected in Kommo itself. Auth: shared
 // x-api-key, same as /api/internal/clients/status. Always stores a TrackedMessage row before
 // anything else — the Kommo write below is a best-effort projection on top of it, never the
 // only copy (see plan doc "TrackFlow como rastreador de leads").
+//
+// Body: portalClientId, text, and waId — or, for source "kommo", kommoContactId instead (Kommo's
+// message webhook carries no phone; it's resolved from the contact). Optional: source
+// ("portal" default | "kommo"), messageId (idempotency), kommoLeadId (source "kommo": the lead
+// that already owns the conversation, written to directly), receivedAt, channel, phoneNumberId,
+// ctwaClid.
 export async function POST(req: NextRequest) {
   const apiKey = req.headers.get('x-api-key');
   if (!process.env.TRACKFLOW_API_KEY || apiKey !== process.env.TRACKFLOW_API_KEY) {
@@ -32,16 +45,25 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json().catch(() => null);
-  const { portalClientId, waId, text, receivedAt, phoneNumberId, channel, ctwaClid } = body ?? {};
-  if (!portalClientId || !waId || typeof text !== 'string') {
+  const { portalClientId, text, receivedAt, phoneNumberId, channel, ctwaClid } = body ?? {};
+  let waId: string | undefined = body?.waId ? String(body.waId) : undefined;
+  const source: 'portal' | 'kommo' = body?.source === 'kommo' ? 'kommo' : 'portal';
+  const kommoContactId = Number(body?.kommoContactId) || null;
+  const kommoLeadId = Number(body?.kommoLeadId) || null;
+  const externalMessageId = body?.messageId ? String(body.messageId) : null;
+
+  if (
+    !portalClientId ||
+    typeof text !== 'string' ||
+    (!waId && !(source === 'kommo' && kommoContactId))
+  ) {
     return NextResponse.json(
-      { error: 'portalClientId, waId e text são obrigatórios' },
+      {
+        error:
+          'portalClientId, text e waId (ou kommoContactId, com source "kommo") são obrigatórios',
+      },
       { status: 400 },
     );
-  }
-
-  if (String(waId).replace(/\D/g, '').length > MAX_PHONE_DIGITS) {
-    return NextResponse.json({ success: true, skipped: 'group conversation' });
   }
 
   const client = await prisma.client.findUnique({ where: { portalClientId } });
@@ -51,28 +73,98 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ success: true, skipped: 'unknown client' });
   }
 
+  // Redelivery of a message we already stored (the sender retried, or Kommo re-sent the webhook).
+  if (externalMessageId) {
+    const already = await prisma.trackedMessage.findUnique({
+      where: {
+        clientId_source_externalMessageId: { clientId: client.id, source, externalMessageId },
+      },
+      select: { id: true },
+    });
+    if (already) {
+      return NextResponse.json({ success: true, duplicate: true, trackedMessageId: already.id });
+    }
+  }
+
+  if (!waId) {
+    // Kommo's message webhook has no phone number — only the contact id. A Kommo/auth failure
+    // answers 502 so the relay retries later; a contact with no phone is permanent, not an error.
+    try {
+      waId = (await resolveKommoContactPhone(client.id, kommoContactId!)) ?? undefined;
+    } catch (err) {
+      console.error('[messages/received] could not resolve Kommo contact phone', err);
+      return NextResponse.json(
+        { error: 'Não foi possível consultar o contato no Kommo' },
+        { status: 502 },
+      );
+    }
+    if (!waId) return NextResponse.json({ success: true, skipped: 'contact has no phone' });
+  }
+
+  if (waId.replace(/\D/g, '').length > MAX_PHONE_DIGITS) {
+    return NextResponse.json({ success: true, skipped: 'group conversation' });
+  }
+
+  // Same message already stored through the OTHER pipeline (client with portal messaging AND a
+  // Kommo-native WhatsApp) — keep one copy.
+  const receivedAtDate = receivedAt ? new Date(receivedAt) : new Date();
+  const crossSourceDuplicate = await prisma.trackedMessage.findFirst({
+    where: {
+      clientId: client.id,
+      source: { not: source },
+      waId: { in: brPhoneVariants(waId) },
+      text,
+      receivedAt: {
+        gte: new Date(receivedAtDate.getTime() - CROSS_SOURCE_DUPLICATE_SECONDS * 1000),
+        lte: new Date(receivedAtDate.getTime() + CROSS_SOURCE_DUPLICATE_SECONDS * 1000),
+      },
+    },
+    select: { id: true },
+  });
+  if (crossSourceDuplicate) {
+    return NextResponse.json({
+      success: true,
+      duplicate: true,
+      trackedMessageId: crossSourceDuplicate.id,
+    });
+  }
+
   const { matchStrategy, matchedSession, matchedMappedAd } = await matchIncomingMessage(
     client.id,
     waId,
     text,
   );
 
-  const trackedMessage = await prisma.trackedMessage.create({
-    data: {
-      clientId: client.id,
-      waId,
-      text,
-      receivedAt: receivedAt ? new Date(receivedAt) : new Date(),
-      phoneNumberId: typeof phoneNumberId === 'string' ? phoneNumberId : null,
-      channel: typeof channel === 'string' ? channel : null,
-      ctwaClid: typeof ctwaClid === 'string' ? ctwaClid : null,
-      matchStrategy,
-      matchedPixelSessionId: matchedSession?.id ?? null,
-      matchedTrackingLinkId: matchedSession?.lastTrackingLinkId ?? null,
-      matchedMappedAdId: matchedMappedAd?.id ?? null,
-      kommoSyncStatus: matchedSession || matchedMappedAd ? 'PENDING' : 'SKIPPED',
-    },
-  });
+  let trackedMessage;
+  try {
+    trackedMessage = await prisma.trackedMessage.create({
+      data: {
+        clientId: client.id,
+        waId,
+        text,
+        source,
+        externalMessageId,
+        // Kommo already told us which lead owns this conversation — keep it so the write goes
+        // straight there instead of searching by phone (see syncTrackedMessageToKommo).
+        kommoLeadId: source === 'kommo' && kommoLeadId ? String(kommoLeadId) : null,
+        receivedAt: receivedAtDate,
+        phoneNumberId: typeof phoneNumberId === 'string' ? phoneNumberId : null,
+        channel: typeof channel === 'string' ? channel : null,
+        ctwaClid: typeof ctwaClid === 'string' ? ctwaClid : null,
+        matchStrategy,
+        matchedPixelSessionId: matchedSession?.id ?? null,
+        matchedTrackingLinkId: matchedSession?.lastTrackingLinkId ?? null,
+        matchedMappedAdId: matchedMappedAd?.id ?? null,
+        kommoSyncStatus: matchedSession || matchedMappedAd ? 'PENDING' : 'SKIPPED',
+      },
+    });
+  } catch (err) {
+    // Two deliveries of the same message raced past the check above.
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+      return NextResponse.json({ success: true, duplicate: true });
+    }
+    throw err;
+  }
 
   if (matchedSession || matchedMappedAd) {
     if (matchedSession) {

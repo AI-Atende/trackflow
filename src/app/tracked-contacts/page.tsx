@@ -8,6 +8,7 @@ import { useRouter } from 'next/navigation';
 import { Sidebar } from '@/components/Sidebar';
 import { Button } from '@/components/ui/Button';
 import { useToast } from '@/contexts/ToastContext';
+import { messageViaLabel } from '@/lib/messageSource';
 
 interface TrackedContact {
   key: string;
@@ -15,6 +16,7 @@ interface TrackedContact {
   firstSeenAt: string;
   lastMessageAt: string;
   messageCount: number;
+  vias: Array<{ source: string; channel: string | null }>;
   attribution: {
     strategy: string;
     receivedAt: string;
@@ -361,6 +363,14 @@ export default function TrackedContactsPage() {
                             <span className="font-mono text-sm font-medium">
                               {formatPhone(c.waId)}
                             </span>
+                            {c.vias.map((v) => (
+                              <span
+                                key={`${v.source}|${v.channel ?? ''}`}
+                                className="text-[10px] border border-border bg-secondary/50 text-muted-foreground px-1.5 py-0.5 rounded-full"
+                              >
+                                {messageViaLabel(v.source, v.channel)}
+                              </span>
+                            ))}
                             {c.trackflowLeadId && (
                               <span className="text-[10px] border border-border bg-secondary px-1.5 py-0.5 rounded-full">
                                 Na jornada

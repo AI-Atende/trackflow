@@ -36,6 +36,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ lead
       matchStrategy: true,
       phoneNumberId: true,
       channel: true,
+      source: true,
       matchedPixelSessionId: true,
       matchedTrackingLink: { select: { label: true, waNumber: true } },
       matchedMappedAd: { select: { adName: true, campaignName: true, platform: true } },

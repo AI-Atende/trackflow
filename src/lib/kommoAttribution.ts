@@ -220,7 +220,13 @@ export async function syncTrackedMessageToKommo(trackedMessageId: string): Promi
     }
 
     const kommo = await getKommoClient(subdomain, client.portalClientId);
-    const lead = await findKommoLead(kommo, message.waId);
+    // A message reported by Kommo itself (source "kommo") already names its lead — use it
+    // directly: no search by phone, so no race with lead creation and no chance of picking an
+    // older lead of the same number. Everything else (portal path) has to find the lead by phone.
+    const lead =
+      message.source === 'kommo' && message.kommoLeadId
+        ? await kommo.leads.getById(Number(message.kommoLeadId))
+        : await findKommoLead(kommo, message.waId);
     if (!lead) {
       return retryOrGiveUp(
         `Nenhum lead encontrado no Kommo para ${message.waId}`,

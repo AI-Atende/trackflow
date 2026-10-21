@@ -407,6 +407,14 @@ model TrackedMessage {
   kommoSyncAttempts   Int       @default(0)
   kommoLastAttemptAt  DateTime?
 
+  // Which pipeline reported this message: 'portal' (relayed by the portal from the messaging
+  // platform) or 'kommo' (relayed by the Assistant from Kommo's own native-channel webhook — for
+  // clients whose WhatsApp is connected in Kommo, not in the portal). A client can have both.
+  source            String  @default("portal")
+  // The sender's own id for the message (portal messageId / Kommo message id) — makes a redelivery
+  // of the same message a no-op instead of a second TrackedMessage.
+  externalMessageId String?
+
   // How the resolved MappedAd (if any) was found — "id" (reliable, dynamic UTM token) vs "name"
   // (fallback match against MappedAd.name, lower confidence) vs null (no ad-catalog match at
   // all). Audit-only — doesn't change what's written to Kommo, see lib/adCatalogMatch.ts.
@@ -419,6 +427,7 @@ model TrackedMessage {
   @@index([receivedAt])
   @@index([matchedPixelSessionId])
   @@index([kommoSyncStatus, createdAt])
+  @@unique([clientId, source, externalMessageId])
 }
 
 // Per-client mapping of UTM/click-id fields to that client's Kommo custom-field IDs (IDs are

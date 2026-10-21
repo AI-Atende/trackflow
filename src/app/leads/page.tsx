@@ -25,6 +25,7 @@ import { Sidebar } from '@/components/Sidebar';
 import { Button } from '@/components/ui/Button';
 import { Select } from '@/components/ui/Select';
 import { useToast } from '@/contexts/ToastContext';
+import { messageViaLabel } from '@/lib/messageSource';
 
 interface JourneyStageOption {
   id: string;
@@ -85,6 +86,7 @@ interface TrackedMessageRow {
   matchStrategy: string;
   phoneNumberId: string | null;
   channel: string | null;
+  source: string;
   matchedTrackingLink: { label: string; waNumber: string } | null;
   matchedMappedAd: { adName: string; campaignName: string; platform: 'META' | 'GOOGLE' } | null;
   matchedPixelSession: {
@@ -991,14 +993,9 @@ export default function LeadsPage() {
                                         </div>
                                       );
                                     })()}
-                                  {msg.channel && (
-                                    <p className="text-[11px] text-muted-foreground">
-                                      Recebido via{' '}
-                                      {msg.channel === 'whatsapp_lite'
-                                        ? 'WhatsApp Lite (QR Code)'
-                                        : 'WhatsApp (API oficial)'}
-                                    </p>
-                                  )}
+                                  <p className="text-[11px] text-muted-foreground">
+                                    Recebido via {messageViaLabel(msg.source, msg.channel)}
+                                  </p>
                                   <p
                                     className="text-[11px] text-muted-foreground"
                                     title={msg.kommoSyncError ?? undefined}
