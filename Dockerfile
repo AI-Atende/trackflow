@@ -1,50 +1,63 @@
-# Build stage
-FROM node:20-alpine AS builder
+# syntax=docker/dockerfile:1
+
+# ==========================================
+# base — Node 24 LTS (padrão do ecossistema)
+# ==========================================
+FROM node:24-alpine AS base
+ENV NEXT_TELEMETRY_DISABLED=1
 WORKDIR /app
 
-# Copy package files
+# ==========================================
+# deps — todas as dependências (para o build)
+# ==========================================
+FROM base AS deps
 COPY package*.json ./
+RUN --mount=type=cache,target=/root/.npm npm ci
 
-# Install dependencies
-RUN npm ci
-
-# Copy source code
+# ==========================================
+# build — prisma generate + next build (standalone)
+# ==========================================
+FROM deps AS build
 COPY . .
-
-# Prisma needs DATABASE_URL to resolve its config at generate time, but the
-# real value is only known at container runtime (passed via docker-compose).
-# A placeholder is enough here since `generate` never connects to the database.
-ARG DATABASE_URL="postgresql://user:password@localhost:5432/db"
-ENV DATABASE_URL=$DATABASE_URL
-
-# Generate Prisma client
+# O prisma.config.ts exige DATABASE_URL só para carregar; o generate não conecta no banco.
+ENV DATABASE_URL="postgresql://build:build@localhost:5432/build"
 RUN npx prisma generate
-
-# Build the application
 RUN npm run build
 
-# Production stage
-FROM node:20-alpine
-WORKDIR /app
+# ==========================================
+# migrate-tools — Prisma CLI isolado para o job de migração
+# (não entra no node_modules do app; versão exata do package-lock.json)
+# ==========================================
+FROM base AS migrate-tools
+WORKDIR /migrate
+COPY package-lock.json /tmp/package-lock.json
+RUN --mount=type=cache,target=/root/.npm \
+    PRISMA_VERSION=$(node -p "require('/tmp/package-lock.json').packages['node_modules/prisma'].version") && \
+    DOTENV_VERSION=$(node -p "require('/tmp/package-lock.json').packages['node_modules/dotenv'].version") && \
+    npm init -y > /dev/null && \
+    npm install --omit=dev --no-audit --no-fund "prisma@${PRISMA_VERSION}" "dotenv@${DOTENV_VERSION}"
 
-# Install production dependencies only
-COPY package*.json ./
-RUN apk add --no-cache openssl
-RUN npm ci --only=production && npm cache clean --force
+# ==========================================
+# runtime — só o servidor standalone + ferramentas de migração
+# ==========================================
+FROM base AS runtime
+ENV NODE_ENV=production \
+    PORT=3000 \
+    # Sem isso o server.js do standalone escuta só no hostname do container.
+    HOSTNAME=0.0.0.0
 
-# Copy built application from builder stage
-COPY --from=builder /app/next.config.ts ./next.config.ts
-COPY --from=builder /app/.next ./.next
-COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/package.json ./package.json
+COPY --from=build --chown=node:node /app/.next/standalone ./
+COPY --from=build --chown=node:node /app/.next/static ./.next/static
 
-# Copy necessary folders for runtime
-COPY --from=builder /app/prisma ./prisma
-COPY --from=builder /app/generated ./generated
-COPY --from=builder /app/prisma.config.ts ./prisma.config.ts
+# Job de migração: `docker compose run --rm migrate` (ver docker-compose.yml).
+COPY --from=migrate-tools --chown=node:node /migrate /migrate
+COPY --chown=node:node prisma /migrate/prisma
+COPY --chown=node:node prisma.config.ts /migrate/prisma.config.ts
 
-# Expose port
+USER node
 EXPOSE 3000
 
-# Start the application
-CMD ["npm", "start"]
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
+  CMD wget -qO- http://127.0.0.1:3000/api/health > /dev/null || exit 1
+
+CMD ["node", "server.js"]

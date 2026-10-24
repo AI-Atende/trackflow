@@ -1,11 +1,32 @@
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 services:
+  # Job de migração (one-shot). Não sobe com `docker compose up`; o deploy roda
+  # `docker compose run --rm migrate` antes de recriar o app1.
+  migrate:
+    image: sunshinedn/trackflow:latest
+    working_dir: /migrate
+    command: ["node_modules/.bin/prisma", "migrate", "deploy"]
+    environment:
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@database:5432/${POSTGRES_DB}?schema=public
+    depends_on:
+      database:
+        condition: service_healthy
+    restart: "no"
+    profiles: ["ops"]
+    logging: *logging
+    networks:
+      - trackflow-network
+
   app1:
     image: sunshinedn/trackflow:latest
     build:
       context: .
       dockerfile: Dockerfile
-    command: sh -c "npx prisma migrate deploy && npm run db:seed && npm start"
-    working_dir: /app
     environment:
       - NODE_ENV=production
       - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@database:5432/${POSTGRES_DB}?schema=public
@@ -25,11 +46,13 @@ services:
       - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
       - GOOGLE_DEVELOPER_TOKEN=${GOOGLE_DEVELOPER_TOKEN}
     restart: unless-stopped
+    init: true
     depends_on:
       database:
         condition: service_healthy
     ports:
-      - "${HOST_PORT_APP_1:-3010}:3000"
+      - "127.0.0.1:${HOST_PORT_APP_1:-3010}:3000"
+    logging: *logging
     networks:
       - trackflow-network
 
@@ -49,11 +72,9 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    logging: *logging
     networks:
       - trackflow-network
-
-volumes:
-  data:
 
 networks:
   trackflow-network:
