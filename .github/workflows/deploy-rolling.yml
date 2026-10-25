@@ -37,7 +37,13 @@ jobs:
             set -e
             cd "${{ secrets.VPS_COMPOSE_DIR }}"
             # Migrations rodam antes do app subir (job one-shot com a mesma imagem).
-            docker compose run --rm migrate
+            # Imagens anteriores ao padrão c1 não têm /migrate (migravam no próprio start) —
+            # nesse caso (ex.: rollback para versão antiga) o job é pulado em vez de falhar.
+            if docker compose run --rm --no-deps --entrypoint sh migrate -c "test -x node_modules/.bin/prisma"; then
+              docker compose run --rm migrate
+            else
+              echo "Imagem sem job de migração (anterior ao c1) — pulando"
+            fi
             docker compose up -d --no-deps app1
             set -a; [ -f .env ] && source .env; set +a
             for i in $(seq 1 12); do
