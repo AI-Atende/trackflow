@@ -36,11 +36,12 @@ jobs:
           script: |
             set -e
             cd "${{ secrets.VPS_COMPOSE_DIR }}"
-            # Migrations rodam antes do app subir (job one-shot com a mesma imagem).
+            # Migrations rodam antes do app subir (job one-shot com a mesma imagem). --no-deps: o
+            # banco já está no ar, e sem isso uma mudança no compose do banco o recriaria no deploy.
             # Imagens anteriores ao padrão c1 não têm /migrate (migravam no próprio start) —
             # nesse caso (ex.: rollback para versão antiga) o job é pulado em vez de falhar.
             if docker compose run --rm --no-deps --entrypoint sh migrate -c "test -x node_modules/.bin/prisma"; then
-              docker compose run --rm migrate
+              docker compose run --rm --no-deps migrate
             else
               echo "Imagem sem job de migração (anterior ao c1) — pulando"
             fi
